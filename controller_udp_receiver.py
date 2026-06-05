@@ -153,9 +153,13 @@ class ControllerUdpReceiver:
             self.stats.last_seq = seq
 
             self.timeout_ms = int(clamp(frame.get("failsafe_timeout_ms", DEFAULT_FAILSAFE_TIMEOUT_MS), MIN_FAILSAFE_TIMEOUT_MS, MAX_FAILSAFE_TIMEOUT_MS))
-            if frame["flags"].get("estop", False):
+            reset_requested = bool(frame["buttons"].get("VIRTUAL_RESET", False))
+            frame_estop = bool(frame["flags"].get("estop", False))
+            if reset_requested and not frame_estop:
+                self.estop_latched = False
+            if frame_estop:
                 self.estop_latched = True
-            # TODO: 后续可通过 VIRTUAL_RESET / ENABLE 状态设计明确的解除急停逻辑。
+            # TODO: 后续可把解除条件扩展为 VIRTUAL_RESET + ENABLE 的双条件确认。
             self.latest_frame = frame
 
     def update_state(self) -> dict:

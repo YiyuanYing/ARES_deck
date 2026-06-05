@@ -23,7 +23,7 @@ import tkinter as tk
 from dataclasses import dataclass, field
 from typing import Dict, List, Tuple
 
-from controller_protocol import BUTTON_NAMES
+from controller_protocol import BUTTON_IDS, BUTTON_NAMES
 from controller_udp_sender import (
     ControllerUdpSender,
     FAILSAFE_TIMEOUT_MS,
@@ -49,6 +49,7 @@ DEFAULT_LOCAL_IP = LOCAL_IP
 DEFAULT_REMOTE_IP = TARGET_IP
 DEFAULT_UDP_PORT = TARGET_PORT
 UDP_SEND_HZ = SEND_HZ
+RESET_PULSE_SECONDS = 0.25
 
 JS_EVENT_BUTTON = 0x01
 JS_EVENT_AXIS = 0x02
@@ -56,15 +57,22 @@ JS_EVENT_INIT = 0x80
 JS_EVENT_SIZE = 8
 
 FOOTER_TOUCH_BUTTONS = {
+    "clear_estop": {
+        "label": "CLEAR ESTOP",
+        "x": 250,
+        "y": 724,
+        "w": 230,
+        "h": 54,
+    },
     "exit_fullscreen": {
-        "x": 390,
+        "x": 525,
         "y": 724,
         "w": 230,
         "h": 54,
     },
     "exit_app": {
         "label": "EXIT APP",
-        "x": 660,
+        "x": 800,
         "y": 724,
         "w": 230,
         "h": 54,
@@ -357,6 +365,7 @@ class ControllerPanel:
         self.calibrating = False
         self.calibration_deadline = 0.0
         self.calibration_samples: Dict[int, List[int]] = {i: [] for i in AXIS_MAP}
+        self.virtual_button_until: Dict[int, float] = {}
 
         self.root.bind("<Escape>", self.exit_program)
         self.root.bind("<F11>", self.toggle_fullscreen)
@@ -399,11 +408,18 @@ class ControllerPanel:
             x2 = x1 + spec["w"]
             y2 = y1 + spec["h"]
             if x1 <= base_x <= x2 and y1 <= base_y <= y2:
-                if action == "exit_fullscreen":
+                if action == "clear_estop":
+                    self.trigger_clear_estop()
+                elif action == "exit_fullscreen":
                     self.toggle_fullscreen()
                 elif action == "exit_app":
                     self.exit_program()
                 return
+
+    def trigger_clear_estop(self) -> None:
+        reset_button_id = BUTTON_IDS["VIRTUAL_RESET"]
+        self.virtual_button_until[reset_button_id] = time.monotonic() + RESET_PULSE_SECONDS
+        print("[safety] VIRTUAL_RESET pulse sent to clear ESTOP latch")
 
     def reset_toggles(self, _event: tk.Event | None = None) -> None:
         for button_id in self.state.button_toggle:
@@ -446,6 +462,17 @@ class ControllerPanel:
         # UDP 发送 toggle 状态：按一下锁存为 True，再按一下解除，类似航模遥控器拨杆。
         # 黄色描边仍然只表示当前 physical pressed；绿色按钮才会进入控制帧 bitmask。
         # TODO: 后续可把屏幕触摸按钮映射到 32~95 的 virtual buttons。
+        now = time.monotonic()
+        buttons = {button_id: self.state.button_toggle.get(button_id, False) for button_id in PHYSICAL_BUTTON_IDS}
+        expired_virtual_buttons = []
+        for button_id, active_until in self.virtual_button_until.items():
+            active = now <= active_until
+            buttons[button_id] = active
+            if not active:
+                expired_virtual_buttons.append(button_id)
+        for button_id in expired_virtual_buttons:
+            self.virtual_button_until.pop(button_id, None)
+
         return {
             "axes": {
                 "lx": self.state.axis_values.get(0, 0.0),
@@ -453,7 +480,7 @@ class ControllerPanel:
                 "rx": self.state.axis_values.get(2, 0.0),
                 "ry": self.state.axis_values.get(3, 0.0),
             },
-            "buttons": {button_id: self.state.button_toggle.get(button_id, False) for button_id in PHYSICAL_BUTTON_IDS},
+            "buttons": buttons,
             "enable": True,
             "estop": False,
         }
@@ -605,7 +632,12 @@ class ControllerPanel:
     def draw_footer(self) -> None:
         for action, spec in FOOTER_TOUCH_BUTTONS.items():
             fill = "#2c3440"
-            outline = "#6ee7a8" if action == "exit_fullscreen" else "#ff8b8b"
+            if action == "clear_estop":
+                outline = "#ffd447"
+            elif action == "exit_fullscreen":
+                outline = "#6ee7a8"
+            else:
+                outline = "#ff8b8b"
             self.rounded_rect(
                 spec["x"],
                 spec["y"],

@@ -230,7 +230,7 @@ Steam Deck `/dev/input/js0` 当前实体按键映射：
 - `failsafe_timeout_ms` 默认来自数据帧，默认值 150 ms。
 - 接收端会限制 timeout：`timeout_ms = clamp(failsafe_timeout_ms, 50, 300)`。
 - 收到 `ESTOP` flag 会立即进入急停。
-- 当前版本进入急停后不会自动解除，代码中保留了 `TODO`，后续可用 `VIRTUAL_RESET` 或 ENABLE 逻辑明确解除。
+- 当前版本进入急停后不会自动恢复；Steam Deck 底部 `CLEAR ESTOP` 触屏按钮会发送短暂的 `VIRTUAL_RESET` 脉冲。接收端收到 `VIRTUAL_RESET` 且当前帧没有 ESTOP flag 时，会清除 ESTOP latch。
 
 接收端维护的 `latest_state` 结构类似：
 
@@ -301,6 +301,7 @@ python controller_protocol.py
 - 在 GUI 中添加触屏按钮。
 - 把触屏按钮状态写入 `VIRTUAL_ESTOP`、`VIRTUAL_ENABLE`、`VIRTUAL_LOW_SPEED` 等 ID。
 - 在 `get_controller_snapshot()` 中把这些状态合并到 `buttons` dict。
+- 当前 GUI 已内置 `CLEAR ESTOP`，它会把 `VIRTUAL_RESET` 置 True 约 250 ms。
 
 把 UDP 换成 H100 数传：
 
