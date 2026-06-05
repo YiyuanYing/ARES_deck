@@ -318,20 +318,18 @@ class UdpControllerSender:
         self._poll_acks(now)
         self._mark_timeouts(now)
 
-        if active_button_ids and now >= self.next_send_at:
+        if now >= self.next_send_at:
             self._send_state(state, now, active_button_ids)
             self.next_send_at = now + self.send_interval
-        elif not active_button_ids:
-            self.next_send_at = now
 
-        self._refresh_metrics(now, has_active_buttons=bool(active_button_ids))
+        self._refresh_metrics(now)
 
     def _send_state(self, state: "ControllerState", now: float, active_button_ids: List[int]) -> None:
         packet = {
             "type": "controller_state",
             "version": 1,
             "source": "steamdeck",
-            "send_mode": "toggle_active",
+            "send_mode": "continuous",
             "seq": self.seq,
             "sent_monotonic": now,
             "sent_unix": time.time(),
@@ -398,21 +396,13 @@ class UdpControllerSender:
             self.sent_times.pop(seq, None)
             self.metrics.timeout_count += 1
 
-    def _refresh_metrics(self, now: float, has_active_buttons: bool) -> None:
+    def _refresh_metrics(self, now: float) -> None:
         cutoff = now - 1.0
         self.tx_window = [item for item in self.tx_window if item >= cutoff]
         self.ack_window = [item for item in self.ack_window if item >= cutoff]
         self.metrics.tx_rate = float(len(self.tx_window))
         self.metrics.ack_rate = float(len(self.ack_window))
         self.metrics.pending_count = len(self.sent_times)
-
-        if not has_active_buttons:
-            self.metrics.connected = False
-            if not self.metrics.last_error:
-                self.metrics.status_text = "UDP idle: no green button"
-            if self.last_ack_at:
-                self.metrics.last_ack_age_ms = (now - self.last_ack_at) * 1000.0
-            return
 
         if self.last_ack_at:
             self.metrics.last_ack_age_ms = (now - self.last_ack_at) * 1000.0
