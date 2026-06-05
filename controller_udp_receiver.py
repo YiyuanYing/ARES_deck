@@ -206,6 +206,7 @@ class ControllerUdpReceiver:
             "flags": flags,
             "axes": axes,
             "buttons": dict(frame["buttons"]),
+            "frame": copy.deepcopy(frame),
             "stats": {
                 "valid_count": self.stats.valid_count,
                 "bad_packets": dict(self.stats.bad_packets),
@@ -237,6 +238,7 @@ class ControllerUdpReceiver:
             },
             "axes": {"lx": 0.0, "ly": 0.0, "rx": 0.0, "ry": 0.0},
             "buttons": {},
+            "frame": None,
             "stats": {"valid_count": 0, "bad_packets": {}},
         }
 
@@ -253,11 +255,37 @@ def format_buttons(buttons: dict) -> str:
     return ",".join(pressed) if pressed else "-"
 
 
+def format_frame(frame: dict | None) -> str:
+    if not frame:
+        return "{}"
+    raw = frame.get("raw", {})
+    compact = {
+        "magic": f"0x{frame.get('magic', 0):04X}",
+        "version": frame.get("version"),
+        "msg_type": frame.get("msg_type"),
+        "length": frame.get("length"),
+        "flags_raw": frame.get("flags_raw"),
+        "seq": frame.get("seq"),
+        "failsafe_timeout_ms": frame.get("failsafe_timeout_ms"),
+        "timestamp_ms": frame.get("timestamp_ms"),
+        "buttons_low": raw.get("buttons_low"),
+        "buttons_high": raw.get("buttons_high"),
+        "axis_lx": raw.get("axis_lx"),
+        "axis_ly": raw.get("axis_ly"),
+        "axis_rx": raw.get("axis_rx"),
+        "axis_ry": raw.get("axis_ry"),
+        "reserved": raw.get("reserved", b"").hex() if isinstance(raw.get("reserved"), (bytes, bytearray)) else raw.get("reserved"),
+        "crc32": f"0x{raw.get('crc32', 0):08X}",
+    }
+    return repr(compact)
+
+
 def build_status_line(state: dict) -> str:
     timestamp = time.strftime("%H:%M:%S")
     axes_text = format_axes(state["axes"])
+    frame_text = format_frame(state.get("frame"))
     if state["remote_timeout"]:
-        return f"[{timestamp}] TIMEOUT age={state['age_ms']:.0f}ms -> ESTOP axes={axes_text}"
+        return f"[{timestamp}] TIMEOUT age={state['age_ms']:.0f}ms -> ESTOP axes={axes_text} frame={frame_text}"
 
     addr = state.get("from")
     addr_text = f"{addr[0]}:{addr[1]}" if addr else "-"
@@ -277,7 +305,7 @@ def build_status_line(state: dict) -> str:
         f"[{timestamp}] {state_text:<7} from={addr_text:<21} seq={str(state['seq']):<5} "
         f"rx={state['rx_rate']:3.0f}/s lost={state['lost']}({state['lost_percent']:.2f}%) "
         f"ooo={state['ooo']} jitter={state['jitter_ms']:4.1f}ms age={state['age_ms']:4.0f}ms "
-        f"axes={axes_text} buttons={format_buttons(state['buttons'])}{bad_text}"
+        f"axes={axes_text} buttons={format_buttons(state['buttons'])}{bad_text} frame={frame_text}"
     )
 
 
@@ -307,7 +335,7 @@ def main() -> None:
 
             state = receiver.update_state()
             if now >= next_print:
-                print(f"\r{build_status_line(state):<200}", end="", flush=True)
+                print(f"\r{build_status_line(state):<700}", end="", flush=True)
                 next_print = now + max(args.print_interval, 0.01)
 
             next_tick += period

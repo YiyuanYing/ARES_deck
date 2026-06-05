@@ -192,7 +192,7 @@ Steam Deck `/dev/input/js0` 当前实体按键映射：
 | 36 | VIRTUAL_AUTO_MODE |
 | 37 | VIRTUAL_RESET |
 
-发送端默认发送 physical pressed 状态。GUI 中绿色 toggle 状态目前只用于显示，后续可以映射到 `32~95` 的虚拟按键。
+发送端默认发送 GUI 的绿色 toggle 状态：按一下锁存为 True，再按一下解除，类似航模遥控器拨杆。黄色描边只表示当前 physical pressed。后续屏幕触摸按钮可以映射到 `32~95` 的虚拟按键。
 
 ## Flags
 
@@ -277,6 +277,7 @@ Steam Deck `/dev/input/js0` 当前实体按键映射：
 - `age`: 距离最近有效帧的时间。
 - `axes`: 左右摇杆状态。
 - `buttons`: 当前按下的可读按钮名，`-` 表示没有按键按下。
+- `frame={...}`: 最近一帧 ControllerFrame V2 的完整字段内容，包括 header、flags、seq、timestamp、buttons bitmask、int16 axes、reserved 和 crc32。
 
 超时示例：
 

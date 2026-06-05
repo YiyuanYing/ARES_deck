@@ -253,6 +253,10 @@ def parse_controller_frame(data: bytes) -> dict:
     ) = struct.unpack(FRAME_FMT, data)
 
     return {
+        "magic": _magic,
+        "version": _version,
+        "msg_type": _msg_type,
+        "length": _length,
         "seq": seq,
         "timestamp_ms": timestamp_ms,
         "failsafe_timeout_ms": failsafe_timeout_ms,

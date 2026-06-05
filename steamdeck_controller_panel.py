@@ -443,8 +443,9 @@ class ControllerPanel:
         self.root.after(REFRESH_MS, self.update_loop)
 
     def get_controller_snapshot(self) -> dict:
-        # UDP 默认发送 physical pressed 状态；toggle 状态只保留给 GUI 显示。
-        # TODO: 后续可把 toggle 状态映射到 32~95 的 virtual buttons。
+        # UDP 发送 toggle 状态：按一下锁存为 True，再按一下解除，类似航模遥控器拨杆。
+        # 黄色描边仍然只表示当前 physical pressed；绿色按钮才会进入控制帧 bitmask。
+        # TODO: 后续可把屏幕触摸按钮映射到 32~95 的 virtual buttons。
         return {
             "axes": {
                 "lx": self.state.axis_values.get(0, 0.0),
@@ -452,7 +453,7 @@ class ControllerPanel:
                 "rx": self.state.axis_values.get(2, 0.0),
                 "ry": self.state.axis_values.get(3, 0.0),
             },
-            "buttons": {button_id: self.state.button_physical.get(button_id, False) for button_id in PHYSICAL_BUTTON_IDS},
+            "buttons": {button_id: self.state.button_toggle.get(button_id, False) for button_id in PHYSICAL_BUTTON_IDS},
             "enable": True,
             "estop": False,
         }
