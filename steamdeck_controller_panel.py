@@ -14,9 +14,7 @@ from __future__ import annotations
 
 import os
 import argparse
-import json
 import queue
-import socket
 import statistics
 import struct
 import threading
@@ -24,6 +22,16 @@ import time
 import tkinter as tk
 from dataclasses import dataclass, field
 from typing import Dict, List, Tuple
+
+from controller_protocol import BUTTON_NAMES
+from controller_udp_sender import (
+    ControllerUdpSender,
+    FAILSAFE_TIMEOUT_MS,
+    LOCAL_IP,
+    SEND_HZ,
+    TARGET_IP,
+    TARGET_PORT,
+)
 
 
 # =========================
@@ -37,12 +45,10 @@ BASE_HEIGHT = 800
 REFRESH_MS = 20  # 50Hz GUI/UDP update loop
 CALIBRATION_SECONDS = 1.0
 
-DEFAULT_LOCAL_IP = "10.20.12.220"
-DEFAULT_REMOTE_IP = "10.20.99.23"
-DEFAULT_UDP_PORT = 5005
-UDP_SEND_HZ = 50.0
-UDP_ACK_TIMEOUT_SECONDS = 0.8
-UDP_STALE_SECONDS = 1.5
+DEFAULT_LOCAL_IP = LOCAL_IP
+DEFAULT_REMOTE_IP = TARGET_IP
+DEFAULT_UDP_PORT = TARGET_PORT
+UDP_SEND_HZ = SEND_HZ
 
 JS_EVENT_BUTTON = 0x01
 JS_EVENT_AXIS = 0x02
@@ -211,6 +217,8 @@ BUTTON_MAP = {
     },
 }
 
+PHYSICAL_BUTTON_IDS = tuple(range(24))
+
 
 def on_button_toggled(button_id: int, name: str, state: bool) -> None:
     """TODO: 后续在这里加入机器人控制指令发送逻辑。"""
@@ -222,206 +230,12 @@ def on_axis_updated(axis_id: int, value: float) -> None:
     _ = axis_id, value
 
 
-def detect_local_ip(remote_ip: str) -> str:
-    """Return the outgoing LAN IP chosen by the OS for the remote host."""
-    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        probe.connect((remote_ip, 9))
-        return probe.getsockname()[0]
-    except OSError:
-        return "unknown"
-    finally:
-        probe.close()
-
-
-@dataclass
-class NetworkMetrics:
-    local_ip: str
-    bind_ip: str
-    remote_ip: str
-    remote_port: int
-    enabled: bool = True
-    connected: bool = False
-    status_text: str = "UDP starting"
-    last_error: str = ""
-    tx_count: int = 0
-    ack_count: int = 0
-    timeout_count: int = 0
-    pending_count: int = 0
-    tx_rate: float = 0.0
-    ack_rate: float = 0.0
-    rtt_ms: float = 0.0
-    rtt_avg_ms: float = 0.0
-    jitter_ms: float = 0.0
-    last_ack_age_ms: float = 0.0
-    payload_bytes: int = 0
-    active_button_count: int = 0
-
-
-class UdpControllerSender:
-    """Non-blocking UDP sender with ACK tracking for LAN controller tests."""
-
-    def __init__(self, local_ip: str, remote_ip: str, remote_port: int, send_hz: float) -> None:
-        self.local_ip = local_ip
-        self.remote_ip = remote_ip
-        self.remote_port = remote_port
-        self.remote_addr = (remote_ip, remote_port)
-        self.send_interval = 1.0 / max(send_hz, 1.0)
-        self.metrics = NetworkMetrics(
-            local_ip=detect_local_ip(remote_ip),
-            bind_ip=local_ip,
-            remote_ip=remote_ip,
-            remote_port=remote_port,
-        )
-        self.sock: socket.socket | None = None
-        self.seq = 0
-        self.next_send_at = 0.0
-        self.sent_times: Dict[int, float] = {}
-        self.tx_window: List[float] = []
-        self.ack_window: List[float] = []
-        self.last_ack_at = 0.0
-        self.last_rtt_ms = 0.0
-        self._open_socket()
-
-    def _open_socket(self) -> None:
-        try:
-            self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self.sock.bind((self.local_ip, 0))
-            self.sock.setblocking(False)
-        except OSError as exc:
-            self.metrics.enabled = False
-            self.metrics.connected = False
-            self.metrics.status_text = "UDP bind failed"
-            self.metrics.last_error = str(exc)
-            if self.sock is not None:
-                self.sock.close()
-                self.sock = None
-            print(f"[udp] bind {self.local_ip}:0 failed: {exc}")
-            return
-
-        self.metrics.bind_ip = self.sock.getsockname()[0]
-        self.metrics.status_text = f"UDP -> {self.remote_ip}:{self.remote_port}"
-        print(f"[udp] sending from {self.sock.getsockname()} to {self.remote_addr}")
-
-    def close(self) -> None:
-        if self.sock is not None:
-            self.sock.close()
-            self.sock = None
-
-    def tick(self, state: "ControllerState") -> None:
-        if not self.metrics.enabled or self.sock is None:
-            return
-
-        now = time.monotonic()
-        active_button_ids = [button_id for button_id, active in state.button_toggle.items() if active]
-        self.metrics.active_button_count = len(active_button_ids)
-        self._poll_acks(now)
-        self._mark_timeouts(now)
-
-        if now >= self.next_send_at:
-            self._send_state(state, now, active_button_ids)
-            self.next_send_at = now + self.send_interval
-
-        self._refresh_metrics(now)
-
-    def _send_state(self, state: "ControllerState", now: float, active_button_ids: List[int]) -> None:
-        packet = {
-            "type": "controller_state",
-            "version": 1,
-            "source": "steamdeck",
-            "send_mode": "continuous",
-            "seq": self.seq,
-            "sent_monotonic": now,
-            "sent_unix": time.time(),
-            "active_buttons": active_button_ids,
-            "buttons_physical": {str(k): v for k, v in state.button_physical.items()},
-            "buttons_toggle": {str(k): v for k, v in state.button_toggle.items()},
-            "axes": {str(k): round(v, 4) for k, v in state.axis_values.items()},
-        }
-        payload = json.dumps(packet, separators=(",", ":")).encode("utf-8")
-        try:
-            self.sock.sendto(payload, self.remote_addr)
-        except OSError as exc:
-            self.metrics.status_text = "UDP send failed"
-            self.metrics.last_error = str(exc)
-            return
-
-        self.metrics.payload_bytes = len(payload)
-        self.metrics.tx_count += 1
-        self.sent_times[self.seq] = now
-        self.tx_window.append(now)
-        self.seq = (self.seq + 1) % 1_000_000_000
-
-    def _poll_acks(self, now: float) -> None:
-        while self.sock is not None:
-            try:
-                payload, _addr = self.sock.recvfrom(4096)
-            except BlockingIOError:
-                break
-            except OSError as exc:
-                self.metrics.status_text = "UDP ack recv failed"
-                self.metrics.last_error = str(exc)
-                break
-
-            try:
-                message = json.loads(payload.decode("utf-8"))
-            except (UnicodeDecodeError, json.JSONDecodeError):
-                continue
-            if message.get("type") != "ack":
-                continue
-
-            seq = message.get("seq")
-            if not isinstance(seq, int) or seq not in self.sent_times:
-                continue
-
-            sent_at = self.sent_times.pop(seq)
-            rtt_ms = (now - sent_at) * 1000.0
-            if self.metrics.ack_count:
-                self.metrics.jitter_ms = self.metrics.jitter_ms * 0.85 + abs(rtt_ms - self.last_rtt_ms) * 0.15
-                self.metrics.rtt_avg_ms = self.metrics.rtt_avg_ms * 0.85 + rtt_ms * 0.15
-            else:
-                self.metrics.rtt_avg_ms = rtt_ms
-            self.last_rtt_ms = rtt_ms
-            self.metrics.rtt_ms = rtt_ms
-            self.metrics.ack_count += 1
-            self.ack_window.append(now)
-            self.last_ack_at = now
-            self.metrics.connected = True
-            self.metrics.status_text = "UDP connected"
-            self.metrics.last_error = ""
-
-    def _mark_timeouts(self, now: float) -> None:
-        expired = [seq for seq, sent_at in self.sent_times.items() if now - sent_at > UDP_ACK_TIMEOUT_SECONDS]
-        for seq in expired:
-            self.sent_times.pop(seq, None)
-            self.metrics.timeout_count += 1
-
-    def _refresh_metrics(self, now: float) -> None:
-        cutoff = now - 1.0
-        self.tx_window = [item for item in self.tx_window if item >= cutoff]
-        self.ack_window = [item for item in self.ack_window if item >= cutoff]
-        self.metrics.tx_rate = float(len(self.tx_window))
-        self.metrics.ack_rate = float(len(self.ack_window))
-        self.metrics.pending_count = len(self.sent_times)
-
-        if self.last_ack_at:
-            self.metrics.last_ack_age_ms = (now - self.last_ack_at) * 1000.0
-            self.metrics.connected = now - self.last_ack_at <= UDP_STALE_SECONDS
-            if not self.metrics.connected:
-                self.metrics.status_text = "UDP waiting for ACK"
-        else:
-            self.metrics.last_ack_age_ms = 0.0
-            self.metrics.connected = False
-            if not self.metrics.last_error:
-                self.metrics.status_text = "UDP waiting for ACK"
-
-
 @dataclass
 class ControllerState:
     """GUI 主线程维护的手柄状态。"""
 
-    button_physical: Dict[int, bool] = field(default_factory=lambda: {i: False for i in BUTTON_MAP})
-    button_toggle: Dict[int, bool] = field(default_factory=lambda: {i: False for i in BUTTON_MAP})
+    button_physical: Dict[int, bool] = field(default_factory=lambda: {i: False for i in PHYSICAL_BUTTON_IDS})
+    button_toggle: Dict[int, bool] = field(default_factory=lambda: {i: False for i in PHYSICAL_BUTTON_IDS})
     raw_axes: Dict[int, int] = field(default_factory=lambda: {i: 0 for i in AXIS_MAP})
     axis_values: Dict[int, float] = field(default_factory=lambda: {i: 0.0 for i in AXIS_MAP})
     center_offsets: Dict[int, float] = field(default_factory=lambda: {i: 0.0 for i in AXIS_MAP})
@@ -510,7 +324,14 @@ class JoystickReader(threading.Thread):
 
 
 class ControllerPanel:
-    def __init__(self, local_ip: str, remote_ip: str, udp_port: int, send_hz: float) -> None:
+    def __init__(
+        self,
+        local_ip: str,
+        remote_ip: str,
+        udp_port: int,
+        send_hz: float,
+        failsafe_timeout_ms: int,
+    ) -> None:
         self.root = tk.Tk()
         self.root.title("Steam Deck Controller Panel")
         self.root.configure(bg="#111418")
@@ -524,7 +345,14 @@ class ControllerPanel:
         self.state = ControllerState()
         self.event_queue: "queue.Queue[Tuple]" = queue.Queue()
         self.reader = JoystickReader(DEVICE_PATH, self.event_queue)
-        self.udp_sender = UdpControllerSender(local_ip, remote_ip, udp_port, send_hz)
+        self.udp_sender = ControllerUdpSender(
+            state_provider=self.get_controller_snapshot,
+            local_ip=local_ip,
+            target_ip=remote_ip,
+            target_port=udp_port,
+            send_hz=send_hz,
+            failsafe_timeout_ms=failsafe_timeout_ms,
+        )
 
         self.calibrating = False
         self.calibration_deadline = 0.0
@@ -541,13 +369,14 @@ class ControllerPanel:
 
     def run(self) -> None:
         self.reader.start()
+        self.udp_sender.start()
         self.begin_calibration("startup")
         self.root.after(REFRESH_MS, self.update_loop)
         self.root.mainloop()
 
     def exit_program(self, _event: tk.Event | None = None) -> None:
         print("[exit] closing controller panel")
-        self.udp_sender.close()
+        self.udp_sender.stop()
         self.reader.stop()
         self.reader.join(timeout=1.0)
         self.root.destroy()
@@ -610,9 +439,23 @@ class ControllerPanel:
     def update_loop(self) -> None:
         self.process_events()
         self.finish_calibration_if_needed()
-        self.udp_sender.tick(self.state)
         self.draw()
         self.root.after(REFRESH_MS, self.update_loop)
+
+    def get_controller_snapshot(self) -> dict:
+        # UDP 默认发送 physical pressed 状态；toggle 状态只保留给 GUI 显示。
+        # TODO: 后续可把 toggle 状态映射到 32~95 的 virtual buttons。
+        return {
+            "axes": {
+                "lx": self.state.axis_values.get(0, 0.0),
+                "ly": self.state.axis_values.get(1, 0.0),
+                "rx": self.state.axis_values.get(2, 0.0),
+                "ry": self.state.axis_values.get(3, 0.0),
+            },
+            "buttons": {button_id: self.state.button_physical.get(button_id, False) for button_id in PHYSICAL_BUTTON_IDS},
+            "enable": True,
+            "estop": False,
+        }
 
     def process_events(self) -> None:
         while True:
@@ -642,7 +485,7 @@ class ControllerPanel:
                 self.handle_axis_event(number, value)
 
     def handle_button_event(self, button_id: int, value: int, is_init: bool = False) -> None:
-        if button_id not in BUTTON_MAP:
+        if button_id not in PHYSICAL_BUTTON_IDS:
             return
 
         was_pressed = self.state.button_physical.get(button_id, False)
@@ -657,7 +500,8 @@ class ControllerPanel:
         if is_pressed and not was_pressed:
             new_state = not self.state.button_toggle[button_id]
             self.state.button_toggle[button_id] = new_state
-            on_button_toggled(button_id, BUTTON_MAP[button_id]["name"], new_state)
+            button_name = BUTTON_MAP.get(button_id, {}).get("name", BUTTON_NAMES.get(button_id, f"BUTTON_{button_id}"))
+            on_button_toggled(button_id, button_name, new_state)
 
     def handle_axis_event(self, axis_id: int, raw_value: int) -> None:
         if axis_id not in AXIS_MAP:
@@ -790,7 +634,7 @@ class ControllerPanel:
         self.rounded_rect(470, 285, 810, 585, 30, fill="", outline="#252b33", width=2)
 
     def draw_network_panel(self) -> None:
-        metrics = self.udp_sender.metrics
+        metrics = self.udp_sender.snapshot_metrics()
         status_color = "#6ee7a8" if metrics.connected else "#ffd447"
         if not metrics.enabled or metrics.last_error:
             status_color = "#ff8b8b"
@@ -799,7 +643,7 @@ class ControllerPanel:
         self.canvas.create_text(
             self.x(640),
             self.y(324),
-            text="LAN UDP LINK",
+            text="CONTROLLERFRAME V2",
             fill="#f2f4f8",
             font=("DejaVu Sans", 14, "bold"),
         )
@@ -814,14 +658,17 @@ class ControllerPanel:
         rows = [
             ("local", metrics.local_ip),
             ("bind", f"{metrics.bind_ip}:auto"),
-            ("remote", f"{metrics.remote_ip}:{metrics.remote_port}"),
-            ("active", f"{metrics.active_button_count} green buttons"),
-            ("tx/ack", f"{metrics.tx_rate:4.0f}/s  {metrics.ack_rate:4.0f}/s"),
-            ("rtt", f"{metrics.rtt_ms:5.1f} ms  avg {metrics.rtt_avg_ms:5.1f}"),
-            ("jitter", f"{metrics.jitter_ms:5.1f} ms"),
-            ("pending", f"{metrics.pending_count}  timeout {metrics.timeout_count}"),
-            ("last ack", f"{metrics.last_ack_age_ms:5.0f} ms ago"),
+            ("target", f"{metrics.target_ip}:{metrics.target_port}"),
+            ("mode", "100Hz UDP binary"),
+            ("tx", f"{metrics.tx_rate:4.0f}/s"),
+            ("seq", f"{metrics.seq}"),
             ("payload", f"{metrics.payload_bytes} bytes"),
+            ("buttons", f"{sum(1 for value in metrics.latest_buttons.values() if value)} physical"),
+            (
+                "axes",
+                f"{metrics.latest_axes.get('lx', 0.0):+.2f},{metrics.latest_axes.get('ly', 0.0):+.2f} "
+                f"{metrics.latest_axes.get('rx', 0.0):+.2f},{metrics.latest_axes.get('ry', 0.0):+.2f}",
+            ),
         ]
         y = 382
         for label, value in rows:
@@ -970,17 +817,18 @@ class ControllerPanel:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Steam Deck controller GUI + UDP LAN sender.")
+    parser = argparse.ArgumentParser(description="Steam Deck controller GUI + ControllerFrame V2 UDP sender.")
     parser.add_argument("--local-ip", default=DEFAULT_LOCAL_IP, help="Steam Deck LAN IP used for UDP bind.")
-    parser.add_argument("--remote-ip", default=DEFAULT_REMOTE_IP, help="Windows receiver LAN IP.")
+    parser.add_argument("--remote-ip", "--target-ip", dest="remote_ip", default=DEFAULT_REMOTE_IP, help="Receiver LAN IP.")
     parser.add_argument("--port", type=int, default=DEFAULT_UDP_PORT, help="UDP receiver port.")
     parser.add_argument("--send-hz", type=float, default=UDP_SEND_HZ, help="Controller packets per second.")
+    parser.add_argument("--failsafe-timeout-ms", type=int, default=FAILSAFE_TIMEOUT_MS, help="Failsafe timeout encoded in each frame.")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    panel = ControllerPanel(args.local_ip, args.remote_ip, args.port, args.send_hz)
+    panel = ControllerPanel(args.local_ip, args.remote_ip, args.port, args.send_hz, args.failsafe_timeout_ms)
     panel.run()
 
 
