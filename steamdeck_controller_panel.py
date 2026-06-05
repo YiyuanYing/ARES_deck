@@ -34,13 +34,13 @@ DEVICE_PATH = "/dev/input/js0"
 DEADZONE = 0.20
 BASE_WIDTH = 1280
 BASE_HEIGHT = 800
-REFRESH_MS = 33  # 约 30Hz，足够显示手柄状态
+REFRESH_MS = 20  # 50Hz GUI/UDP update loop
 CALIBRATION_SECONDS = 1.0
 
 DEFAULT_LOCAL_IP = "10.20.12.220"
 DEFAULT_REMOTE_IP = "10.20.99.23"
 DEFAULT_UDP_PORT = 5005
-UDP_SEND_HZ = 30.0
+UDP_SEND_HZ = 50.0
 UDP_ACK_TIMEOUT_SECONDS = 0.8
 UDP_STALE_SECONDS = 1.5
 
@@ -255,6 +255,7 @@ class NetworkMetrics:
     jitter_ms: float = 0.0
     last_ack_age_ms: float = 0.0
     payload_bytes: int = 0
+    active_button_count: int = 0
 
 
 class UdpControllerSender:
@@ -312,21 +313,29 @@ class UdpControllerSender:
             return
 
         now = time.monotonic()
+        active_button_ids = [button_id for button_id, active in state.button_toggle.items() if active]
+        self.metrics.active_button_count = len(active_button_ids)
         self._poll_acks(now)
         self._mark_timeouts(now)
-        if now >= self.next_send_at:
-            self._send_state(state, now)
-            self.next_send_at = now + self.send_interval
-        self._refresh_metrics(now)
 
-    def _send_state(self, state: "ControllerState", now: float) -> None:
+        if active_button_ids and now >= self.next_send_at:
+            self._send_state(state, now, active_button_ids)
+            self.next_send_at = now + self.send_interval
+        elif not active_button_ids:
+            self.next_send_at = now
+
+        self._refresh_metrics(now, has_active_buttons=bool(active_button_ids))
+
+    def _send_state(self, state: "ControllerState", now: float, active_button_ids: List[int]) -> None:
         packet = {
             "type": "controller_state",
             "version": 1,
             "source": "steamdeck",
+            "send_mode": "toggle_active",
             "seq": self.seq,
             "sent_monotonic": now,
             "sent_unix": time.time(),
+            "active_buttons": active_button_ids,
             "buttons_physical": {str(k): v for k, v in state.button_physical.items()},
             "buttons_toggle": {str(k): v for k, v in state.button_toggle.items()},
             "axes": {str(k): round(v, 4) for k, v in state.axis_values.items()},
@@ -389,13 +398,21 @@ class UdpControllerSender:
             self.sent_times.pop(seq, None)
             self.metrics.timeout_count += 1
 
-    def _refresh_metrics(self, now: float) -> None:
+    def _refresh_metrics(self, now: float, has_active_buttons: bool) -> None:
         cutoff = now - 1.0
         self.tx_window = [item for item in self.tx_window if item >= cutoff]
         self.ack_window = [item for item in self.ack_window if item >= cutoff]
         self.metrics.tx_rate = float(len(self.tx_window))
         self.metrics.ack_rate = float(len(self.ack_window))
         self.metrics.pending_count = len(self.sent_times)
+
+        if not has_active_buttons:
+            self.metrics.connected = False
+            if not self.metrics.last_error:
+                self.metrics.status_text = "UDP idle: no green button"
+            if self.last_ack_at:
+                self.metrics.last_ack_age_ms = (now - self.last_ack_at) * 1000.0
+            return
 
         if self.last_ack_at:
             self.metrics.last_ack_age_ms = (now - self.last_ack_at) * 1000.0
@@ -808,6 +825,7 @@ class ControllerPanel:
             ("local", metrics.local_ip),
             ("bind", f"{metrics.bind_ip}:auto"),
             ("remote", f"{metrics.remote_ip}:{metrics.remote_port}"),
+            ("active", f"{metrics.active_button_count} green buttons"),
             ("tx/ack", f"{metrics.tx_rate:4.0f}/s  {metrics.ack_rate:4.0f}/s"),
             ("rtt", f"{metrics.rtt_ms:5.1f} ms  avg {metrics.rtt_avg_ms:5.1f}"),
             ("jitter", f"{metrics.jitter_ms:5.1f} ms"),

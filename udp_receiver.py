@@ -15,38 +15,13 @@ import socket
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Deque, Dict, Tuple
+from typing import Deque, Dict, List, Tuple
 
 
 DEFAULT_BIND_IP = "10.20.99.23"
 DEFAULT_PORT = 5005
-PRINT_INTERVAL_SECONDS = 1.0
+PRINT_INTERVAL_SECONDS = 0.02
 STALE_SECONDS = 2.0
-
-BUTTON_LABELS = {
-    "2": "...",
-    "3": "A",
-    "4": "B",
-    "5": "X",
-    "6": "Y",
-    "7": "LB",
-    "8": "RB",
-    "9": "LT",
-    "10": "RT",
-    "11": "VIEW",
-    "12": "MENU",
-    "13": "STEAM",
-    "14": "L3",
-    "15": "R3",
-    "16": "UP",
-    "17": "DOWN",
-    "18": "LEFT",
-    "19": "RIGHT",
-    "20": "L4",
-    "21": "R4",
-    "22": "L5",
-    "23": "R5",
-}
 
 
 @dataclass
@@ -63,7 +38,7 @@ class ReceiverStats:
     jitter_ms: float = 0.0
     rx_times: Deque[float] = field(default_factory=deque)
     latest_axes: Dict[str, float] = field(default_factory=dict)
-    latest_buttons: Dict[str, bool] = field(default_factory=dict)
+    latest_active_buttons: List[int] = field(default_factory=list)
 
     def note_packet(self, seq: int, addr: Tuple[str, int], now: float) -> None:
         self.packet_count += 1
@@ -112,9 +87,10 @@ def format_axes(axes: Dict[str, float]) -> str:
     return f"L({left_x:+.2f},{left_y:+.2f}) R({right_x:+.2f},{right_y:+.2f})"
 
 
-def format_buttons(buttons: Dict[str, bool]) -> str:
-    pressed = [BUTTON_LABELS.get(key, key) for key, value in buttons.items() if value]
-    return ",".join(pressed[:8]) if pressed else "-"
+def format_buttons(buttons: List[int]) -> str:
+    if not buttons:
+        return "-"
+    return ",".join(str(button_id) for button_id in sorted(buttons)[:12])
 
 
 def handle_packet(sock: socket.socket, payload: bytes, addr: Tuple[str, int], stats: ReceiverStats) -> None:
@@ -135,7 +111,11 @@ def handle_packet(sock: socket.socket, payload: bytes, addr: Tuple[str, int], st
 
     stats.note_packet(seq, addr, now)
     stats.latest_axes = packet.get("axes", {})
-    stats.latest_buttons = packet.get("buttons_physical", {})
+    active_buttons = packet.get("active_buttons", [])
+    if isinstance(active_buttons, list):
+        stats.latest_active_buttons = [int(button_id) for button_id in active_buttons if isinstance(button_id, int)]
+    else:
+        stats.latest_active_buttons = []
 
     ack = {
         "type": "ack",
@@ -147,19 +127,23 @@ def handle_packet(sock: socket.socket, payload: bytes, addr: Tuple[str, int], st
     stats.ack_count += 1
 
 
-def print_status(stats: ReceiverStats) -> None:
+def build_status_line(stats: ReceiverStats) -> str:
     now = time.monotonic()
     age_ms = (now - stats.last_packet_at) * 1000.0 if stats.last_packet_at else 0.0
     state = "online" if stats.last_packet_at and now - stats.last_packet_at <= STALE_SECONDS else "waiting"
     addr_text = f"{stats.last_addr[0]}:{stats.last_addr[1]}" if stats.last_addr else "-"
     seq_text = str(stats.last_seq) if stats.last_seq is not None else "-"
-    print(
+    return (
         f"[{time.strftime('%H:%M:%S')}] {state:<7} from={addr_text:<21} "
         f"seq={seq_text:<9} rx={stats.rx_rate(now):4.0f}/s ack={stats.ack_count:<7} "
         f"lost={stats.lost_count}({stats.loss_percent():.2f}%) ooo={stats.out_of_order_count} "
         f"jitter={stats.jitter_ms:5.1f}ms age={age_ms:5.0f}ms "
-        f"axes={format_axes(stats.latest_axes)} buttons={format_buttons(stats.latest_buttons)}"
+        f"axes={format_axes(stats.latest_axes)} buttons={format_buttons(stats.latest_active_buttons)}"
     )
+
+
+def print_status(stats: ReceiverStats) -> None:
+    print(f"\r{build_status_line(stats):<180}", end="", flush=True)
 
 
 def main() -> None:
@@ -167,7 +151,7 @@ def main() -> None:
     stats = ReceiverStats()
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((args.bind_ip, args.port))
-    sock.settimeout(0.2)
+    sock.settimeout(0.005)
 
     print(f"[udp] listening on {args.bind_ip}:{args.port}")
     print("[udp] allow Python through Windows Firewall if packets do not arrive.")
@@ -185,7 +169,7 @@ def main() -> None:
             now = time.monotonic()
             if now >= next_print_at:
                 print_status(stats)
-                next_print_at = now + max(args.print_interval, 0.2)
+                next_print_at = now + max(args.print_interval, 0.005)
     except KeyboardInterrupt:
         print("\n[udp] stopped")
     finally:
