@@ -281,45 +281,6 @@ class JoystickReader(threading.Thread):
         self.stop_event.set()
         self._close_device()
 
-
-class HostReachabilityMonitor(threading.Thread):
-    """后台 ping 目标主机，避免 UDP socket 在线但主机实际断开的假绿状态。"""
-
-    def __init__(self, target_ip: str, interval: float = 1.0) -> None:
-        super().__init__(daemon=True)
-        self.target_ip = target_ip
-        self.interval = interval
-        self.stop_event = threading.Event()
-        self.lock = threading.Lock()
-        self.reachable = False
-        self.last_checked_at = 0.0
-
-    def stop(self) -> None:
-        self.stop_event.set()
-
-    def snapshot(self) -> tuple[bool, float]:
-        with self.lock:
-            return self.reachable, self.last_checked_at
-
-    def run(self) -> None:
-        while not self.stop_event.is_set():
-            reachable = self._ping_once()
-            with self.lock:
-                self.reachable = reachable
-                self.last_checked_at = time.monotonic()
-            self.stop_event.wait(self.interval)
-
-    def _ping_once(self) -> bool:
-        if platform.system().lower().startswith("win"):
-            command = ["ping", "-n", "1", "-w", "800", self.target_ip]
-        else:
-            command = ["ping", "-c", "1", "-W", "1", self.target_ip]
-        try:
-            result = subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.5)
-        except (OSError, subprocess.TimeoutExpired):
-            return False
-        return result.returncode == 0
-
     def _close_device(self) -> None:
         if self.fd is not None:
             try:
@@ -384,6 +345,45 @@ class HostReachabilityMonitor(threading.Thread):
         self._close_device()
 
 
+class HostReachabilityMonitor(threading.Thread):
+    """后台 ping 目标主机，避免 UDP socket 在线但主机实际断开的假绿状态。"""
+
+    def __init__(self, target_ip: str, interval: float = 1.0) -> None:
+        super().__init__(daemon=True)
+        self.target_ip = target_ip
+        self.interval = interval
+        self.stop_event = threading.Event()
+        self.lock = threading.Lock()
+        self.reachable = False
+        self.last_checked_at = 0.0
+
+    def stop(self) -> None:
+        self.stop_event.set()
+
+    def snapshot(self) -> tuple[bool, float]:
+        with self.lock:
+            return self.reachable, self.last_checked_at
+
+    def run(self) -> None:
+        while not self.stop_event.is_set():
+            reachable = self._ping_once()
+            with self.lock:
+                self.reachable = reachable
+                self.last_checked_at = time.monotonic()
+            self.stop_event.wait(self.interval)
+
+    def _ping_once(self) -> bool:
+        if platform.system().lower().startswith("win"):
+            command = ["ping", "-n", "1", "-w", "800", self.target_ip]
+        else:
+            command = ["ping", "-c", "1", "-W", "1", self.target_ip]
+        try:
+            result = subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.5)
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        return result.returncode == 0
+
+
 class ControllerPanel:
     def __init__(
         self,
@@ -420,6 +420,9 @@ class ControllerPanel:
         self.calibration_deadline = 0.0
         self.calibration_samples: Dict[int, List[int]] = {i: [] for i in AXIS_MAP}
         self.virtual_button_until: Dict[int, float] = {}
+        self.physical_button_flash_until: Dict[int, float] = {}
+        self.last_touch_at = 0.0
+        self.last_touch_target = ""
 
         self.root.bind("<Escape>", self.exit_program)
         self.root.bind("<F11>", self.toggle_fullscreen)
@@ -427,7 +430,7 @@ class ControllerPanel:
         self.root.bind("<R>", self.reset_toggles)
         self.root.bind("<c>", self.recalibrate_axes)
         self.root.bind("<C>", self.recalibrate_axes)
-        self.canvas.bind("<ButtonRelease-1>", self.handle_canvas_touch)
+        self.canvas.bind("<ButtonPress-1>", self.handle_canvas_touch)
         self.root.protocol("WM_DELETE_WINDOW", self.exit_program)
 
     def run(self) -> None:
@@ -465,6 +468,8 @@ class ControllerPanel:
             x2 = x1 + spec["w"]
             y2 = y1 + spec["h"]
             if x1 <= base_x <= x2 and y1 <= base_y <= y2:
+                if self.touch_is_duplicate(f"virtual:{button_id}"):
+                    return
                 self.toggle_virtual_button(button_id)
                 return
 
@@ -474,6 +479,8 @@ class ControllerPanel:
             x2 = x1 + spec["w"]
             y2 = y1 + spec["h"]
             if x1 <= base_x <= x2 and y1 <= base_y <= y2:
+                if self.touch_is_duplicate(f"footer:{action}"):
+                    return
                 if action == "clear_estop":
                     self.trigger_clear_estop()
                 elif action == "exit_fullscreen":
@@ -481,6 +488,13 @@ class ControllerPanel:
                 elif action == "exit_app":
                     self.exit_program()
                 return
+
+    def touch_is_duplicate(self, target: str) -> bool:
+        now = time.monotonic()
+        is_duplicate = target == self.last_touch_target and now - self.last_touch_at < 0.18
+        self.last_touch_target = target
+        self.last_touch_at = now
+        return is_duplicate
 
     def toggle_virtual_button(self, button_id: int) -> None:
         new_state = not self.state.virtual_button_toggle.get(button_id, False)
@@ -599,6 +613,8 @@ class ControllerPanel:
         was_pressed = self.state.button_physical.get(button_id, False)
         is_pressed = value != 0
         self.state.button_physical[button_id] = is_pressed
+        if is_pressed:
+            self.physical_button_flash_until[button_id] = time.monotonic() + 0.12
 
         # 初始化事件只同步当前物理状态，不视为一次真实按下。
         if is_init:
@@ -782,9 +798,10 @@ class ControllerPanel:
     def draw_button(self, button_id: int, spec: Dict) -> None:
         toggled = self.state.button_toggle.get(button_id, False)
         physical = self.state.button_physical.get(button_id, False)
-        fill = "#1fbf75" if physical else "#29313a"
-        outline = "#7df0b4" if physical else "#596575"
-        width = 3 if physical or toggled else 2
+        visible_pressed = physical or time.monotonic() <= self.physical_button_flash_until.get(button_id, 0.0)
+        fill = "#1fbf75" if visible_pressed else "#29313a"
+        outline = "#7df0b4" if visible_pressed else "#596575"
+        width = 3 if visible_pressed or toggled else 2
         shape = spec["shape"]
 
         if shape == "circle":
