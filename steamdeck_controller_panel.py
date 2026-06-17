@@ -14,9 +14,11 @@ from __future__ import annotations
 
 import os
 import argparse
+import platform
 import queue
 import statistics
 import struct
+import subprocess
 import threading
 import time
 import tkinter as tk
@@ -57,17 +59,40 @@ JS_EVENT_INIT = 0x80
 JS_EVENT_SIZE = 8
 
 VIRTUAL_BUTTON_MAP = {
-    32: {"name": "VIRTUAL_ESTOP", "label": "ESTOP", "x": 255, "y": 210, "w": 170, "h": 145, "radius": 18},
-    33: {"name": "VIRTUAL_ENABLE", "label": "ENABLE", "x": 455, "y": 210, "w": 170, "h": 145, "radius": 18},
-    34: {"name": "VIRTUAL_LOW_SPEED", "label": "LOW\nSPEED", "x": 655, "y": 210, "w": 170, "h": 145, "radius": 18},
-    35: {"name": "VIRTUAL_HIGH_SPEED", "label": "HIGH\nSPEED", "x": 855, "y": 210, "w": 170, "h": 145, "radius": 18},
-    36: {"name": "VIRTUAL_AUTO_MODE", "label": "AUTO\nMODE", "x": 255, "y": 420, "w": 170, "h": 145, "radius": 18},
-    37: {"name": "VIRTUAL_RESET", "label": "RESET", "x": 455, "y": 420, "w": 170, "h": 145, "radius": 18},
-    38: {"name": "VIRTUAL_AUX_1", "label": "AUX 1", "x": 655, "y": 420, "w": 170, "h": 145, "radius": 18},
-    39: {"name": "VIRTUAL_AUX_2", "label": "AUX 2", "x": 855, "y": 420, "w": 170, "h": 145, "radius": 18},
+    32: {"name": "VIRTUAL_ESTOP", "label": "Button1", "x": 153, "y": 150, "w": 237, "h": 260, "radius": 18},
+    33: {"name": "VIRTUAL_ENABLE", "label": "Button2", "x": 398, "y": 150, "w": 237, "h": 260, "radius": 18},
+    34: {"name": "VIRTUAL_LOW_SPEED", "label": "Button3", "x": 643, "y": 150, "w": 237, "h": 260, "radius": 18},
+    35: {"name": "VIRTUAL_HIGH_SPEED", "label": "Button4", "x": 888, "y": 150, "w": 237, "h": 260, "radius": 18},
+    36: {"name": "VIRTUAL_AUTO_MODE", "label": "Button5", "x": 153, "y": 418, "w": 237, "h": 260, "radius": 18},
+    37: {"name": "VIRTUAL_RESET", "label": "Button6", "x": 398, "y": 418, "w": 237, "h": 260, "radius": 18},
+    38: {"name": "VIRTUAL_AUX_1", "label": "Button7", "x": 643, "y": 418, "w": 237, "h": 260, "radius": 18},
+    39: {"name": "VIRTUAL_AUX_2", "label": "Button8", "x": 888, "y": 418, "w": 237, "h": 260, "radius": 18},
 }
 
 VIRTUAL_BUTTON_IDS = tuple(VIRTUAL_BUTTON_MAP)
+
+FOOTER_TOUCH_BUTTONS = {
+    "clear_estop": {
+        "label": "CLEAR ESTOP",
+        "x": 250,
+        "y": 724,
+        "w": 230,
+        "h": 54,
+    },
+    "exit_fullscreen": {
+        "x": 525,
+        "y": 724,
+        "w": 230,
+        "h": 54,
+    },
+    "exit_app": {
+        "label": "EXIT APP",
+        "x": 800,
+        "y": 724,
+        "w": 230,
+        "h": 54,
+    },
+}
 
 
 # =========================
@@ -82,160 +107,138 @@ AXIS_MAP = {
     3: {"name": "Right Stick Y", "stick": "right", "component": "y"},
 }
 
-BUTTON_MAP = {
-    0: {
-        "name": "Left Trackpad",
-        "label": "LPAD",
-        "shape": "rounded_rect",
-        "x": 20,
-        "y": 665,
-        "w": 120,
-        "h": 42,
-        "radius": 12,
-    },
-    1: {
-        "name": "Right Trackpad",
-        "label": "RPAD",
-        "shape": "rounded_rect",
-        "x": 1140,
-        "y": 665,
-        "w": 120,
-        "h": 42,
-        "radius": 12,
-    },
+DISPLAY_BUTTON_MAP = {
     2: {
         "name": "Quick Access / ...",
         "label": "...",
         "shape": "rounded_rect",
-        "x": 690,
-        "y": 705,
-        "w": 80,
-        "h": 42,
+        "x": 1208,
+        "y": 625,
+        "w": 46,
+        "h": 48,
         "radius": 12,
     },
-    3: {"name": "A", "label": "A", "shape": "circle", "x": 1115, "y": 265, "r": 26},
-    4: {"name": "B", "label": "B", "shape": "circle", "x": 1160, "y": 220, "r": 26},
-    5: {"name": "X", "label": "X", "shape": "circle", "x": 1070, "y": 220, "r": 26},
-    6: {"name": "Y", "label": "Y", "shape": "circle", "x": 1115, "y": 175, "r": 26},
+    3: {"name": "A", "label": "A", "shape": "circle", "x": 1234, "y": 486, "r": 12},
+    4: {"name": "B", "label": "B", "shape": "circle", "x": 1260, "y": 459, "r": 12},
+    5: {"name": "X", "label": "X", "shape": "circle", "x": 1208, "y": 459, "r": 12},
+    6: {"name": "Y", "label": "Y", "shape": "circle", "x": 1234, "y": 432, "r": 12},
     7: {
         "name": "LB",
         "label": "LB",
         "shape": "rounded_rect",
-        "x": 20,
-        "y": 108,
-        "w": 120,
-        "h": 38,
+        "x": 28,
+        "y": 112,
+        "w": 91,
+        "h": 42,
         "radius": 12,
     },
     8: {
         "name": "RB",
         "label": "RB",
         "shape": "rounded_rect",
-        "x": 1140,
-        "y": 108,
-        "w": 120,
-        "h": 38,
+        "x": 1161,
+        "y": 112,
+        "w": 91,
+        "h": 42,
         "radius": 12,
     },
     9: {
         "name": "LT Full Press",
         "label": "LT",
         "shape": "rounded_rect",
-        "x": 20,
+        "x": 28,
         "y": 62,
-        "w": 120,
-        "h": 38,
+        "w": 91,
+        "h": 42,
         "radius": 12,
     },
     10: {
         "name": "RT Full Press",
         "label": "RT",
         "shape": "rounded_rect",
-        "x": 1140,
+        "x": 1161,
         "y": 62,
-        "w": 120,
-        "h": 38,
+        "w": 91,
+        "h": 42,
         "radius": 12,
     },
     11: {
         "name": "View / Select",
         "label": "VIEW",
         "shape": "rounded_rect",
-        "x": 510,
-        "y": 705,
-        "w": 82,
-        "h": 42,
+        "x": 78,
+        "y": 625,
+        "w": 46,
+        "h": 48,
         "radius": 12,
     },
     12: {
         "name": "Menu / Start",
         "label": "MENU",
         "shape": "rounded_rect",
-        "x": 610,
-        "y": 705,
-        "w": 82,
-        "h": 42,
+        "x": 1161,
+        "y": 625,
+        "w": 46,
+        "h": 48,
         "radius": 12,
     },
     13: {
         "name": "Steam",
         "label": "STEAM",
         "shape": "rounded_rect",
-        "x": 410,
-        "y": 705,
-        "w": 90,
-        "h": 42,
+        "x": 28,
+        "y": 625,
+        "w": 41,
+        "h": 48,
         "radius": 12,
     },
-    14: {"name": "L3", "label": "L3", "shape": "stick_circle", "x": 98, "y": 600, "r": 52},
-    15: {"name": "R3", "label": "R3", "shape": "stick_circle", "x": 1182, "y": 600, "r": 52},
-    16: {"name": "D-pad Up", "label": "UP", "shape": "rounded_rect", "x": 92, "y": 360, "w": 58, "h": 50, "radius": 10},
-    17: {"name": "D-pad Down", "label": "DOWN", "shape": "rounded_rect", "x": 92, "y": 468, "w": 58, "h": 50, "radius": 10},
-    18: {"name": "D-pad Left", "label": "LEFT", "shape": "rounded_rect", "x": 32, "y": 414, "w": 58, "h": 50, "radius": 10},
-    19: {"name": "D-pad Right", "label": "RIGHT", "shape": "rounded_rect", "x": 152, "y": 414, "w": 58, "h": 50, "radius": 10},
+    16: {"name": "D-pad Up", "label": "UP", "shape": "rounded_rect", "x": 58, "y": 420, "w": 28, "h": 34, "radius": 8},
+    17: {"name": "D-pad Down", "label": "DOWN", "shape": "rounded_rect", "x": 58, "y": 496, "w": 28, "h": 34, "radius": 8},
+    18: {"name": "D-pad Left", "label": "LEFT", "shape": "rounded_rect", "x": 18, "y": 458, "w": 28, "h": 34, "radius": 8},
+    19: {"name": "D-pad Right", "label": "RIGHT", "shape": "rounded_rect", "x": 98, "y": 458, "w": 28, "h": 34, "radius": 8},
     20: {
         "name": "L4",
         "label": "L4",
         "shape": "rounded_rect",
-        "x": 20,
-        "y": 205,
-        "w": 70,
-        "h": 98,
-        "radius": 18,
+        "x": 28,
+        "y": 208,
+        "w": 41,
+        "h": 110,
+        "radius": 14,
     },
     21: {
         "name": "R4",
         "label": "R4",
         "shape": "rounded_rect",
-        "x": 1190,
-        "y": 205,
-        "w": 70,
-        "h": 98,
-        "radius": 18,
+        "x": 1161,
+        "y": 208,
+        "w": 41,
+        "h": 110,
+        "radius": 14,
     },
     22: {
         "name": "L5",
         "label": "L5",
         "shape": "rounded_rect",
-        "x": 20,
-        "y": 540,
-        "w": 70,
-        "h": 98,
-        "radius": 18,
+        "x": 78,
+        "y": 208,
+        "w": 41,
+        "h": 110,
+        "radius": 14,
     },
     23: {
         "name": "R5",
         "label": "R5",
         "shape": "rounded_rect",
-        "x": 1190,
-        "y": 540,
-        "w": 70,
-        "h": 98,
-        "radius": 18,
+        "x": 1208,
+        "y": 208,
+        "w": 41,
+        "h": 110,
+        "radius": 14,
     },
 }
 
-PHYSICAL_BUTTON_IDS = tuple(range(24))
+OUTPUT_PHYSICAL_BUTTON_IDS = tuple(range(2, 24))
 
 
 def on_button_toggled(button_id: int, name: str, state: bool) -> None:
@@ -252,8 +255,8 @@ def on_axis_updated(axis_id: int, value: float) -> None:
 class ControllerState:
     """GUI 主线程维护的手柄状态。"""
 
-    button_physical: Dict[int, bool] = field(default_factory=lambda: {i: False for i in PHYSICAL_BUTTON_IDS})
-    button_toggle: Dict[int, bool] = field(default_factory=lambda: {i: False for i in PHYSICAL_BUTTON_IDS})
+    button_physical: Dict[int, bool] = field(default_factory=lambda: {i: False for i in OUTPUT_PHYSICAL_BUTTON_IDS})
+    button_toggle: Dict[int, bool] = field(default_factory=lambda: {i: False for i in OUTPUT_PHYSICAL_BUTTON_IDS})
     virtual_button_toggle: Dict[int, bool] = field(default_factory=lambda: {i: False for i in VIRTUAL_BUTTON_IDS})
     raw_axes: Dict[int, int] = field(default_factory=lambda: {i: 0 for i in AXIS_MAP})
     axis_values: Dict[int, float] = field(default_factory=lambda: {i: 0.0 for i in AXIS_MAP})
@@ -277,6 +280,45 @@ class JoystickReader(threading.Thread):
     def stop(self) -> None:
         self.stop_event.set()
         self._close_device()
+
+
+class HostReachabilityMonitor(threading.Thread):
+    """后台 ping 目标主机，避免 UDP socket 在线但主机实际断开的假绿状态。"""
+
+    def __init__(self, target_ip: str, interval: float = 1.0) -> None:
+        super().__init__(daemon=True)
+        self.target_ip = target_ip
+        self.interval = interval
+        self.stop_event = threading.Event()
+        self.lock = threading.Lock()
+        self.reachable = False
+        self.last_checked_at = 0.0
+
+    def stop(self) -> None:
+        self.stop_event.set()
+
+    def snapshot(self) -> tuple[bool, float]:
+        with self.lock:
+            return self.reachable, self.last_checked_at
+
+    def run(self) -> None:
+        while not self.stop_event.is_set():
+            reachable = self._ping_once()
+            with self.lock:
+                self.reachable = reachable
+                self.last_checked_at = time.monotonic()
+            self.stop_event.wait(self.interval)
+
+    def _ping_once(self) -> bool:
+        if platform.system().lower().startswith("win"):
+            command = ["ping", "-n", "1", "-w", "800", self.target_ip]
+        else:
+            command = ["ping", "-c", "1", "-W", "1", self.target_ip]
+        try:
+            result = subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.5)
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        return result.returncode == 0
 
     def _close_device(self) -> None:
         if self.fd is not None:
@@ -364,6 +406,7 @@ class ControllerPanel:
         self.state = ControllerState()
         self.event_queue: "queue.Queue[Tuple]" = queue.Queue()
         self.reader = JoystickReader(DEVICE_PATH, self.event_queue)
+        self.host_monitor = HostReachabilityMonitor(remote_ip)
         self.udp_sender = ControllerUdpSender(
             state_provider=self.get_controller_snapshot,
             local_ip=local_ip,
@@ -389,6 +432,7 @@ class ControllerPanel:
 
     def run(self) -> None:
         self.reader.start()
+        self.host_monitor.start()
         self.udp_sender.start()
         self.begin_calibration("startup")
         self.root.after(REFRESH_MS, self.update_loop)
@@ -397,7 +441,9 @@ class ControllerPanel:
     def exit_program(self, _event: tk.Event | None = None) -> None:
         print("[exit] closing controller panel")
         self.udp_sender.stop()
+        self.host_monitor.stop()
         self.reader.stop()
+        self.host_monitor.join(timeout=1.0)
         self.reader.join(timeout=1.0)
         self.root.destroy()
 
@@ -420,6 +466,20 @@ class ControllerPanel:
             y2 = y1 + spec["h"]
             if x1 <= base_x <= x2 and y1 <= base_y <= y2:
                 self.toggle_virtual_button(button_id)
+                return
+
+        for action, spec in FOOTER_TOUCH_BUTTONS.items():
+            x1 = spec["x"]
+            y1 = spec["y"]
+            x2 = x1 + spec["w"]
+            y2 = y1 + spec["h"]
+            if x1 <= base_x <= x2 and y1 <= base_y <= y2:
+                if action == "clear_estop":
+                    self.trigger_clear_estop()
+                elif action == "exit_fullscreen":
+                    self.toggle_fullscreen()
+                elif action == "exit_app":
+                    self.exit_program()
                 return
 
     def toggle_virtual_button(self, button_id: int) -> None:
@@ -477,7 +537,10 @@ class ControllerPanel:
         # UDP 发送锁存状态：实体键沿用按一下切换一次，屏幕虚拟键用中间大按钮切换。
         # 边缘实体键绿色只表示当前 physical pressed，不影响原有实体键锁存发送逻辑。
         now = time.monotonic()
-        buttons = {button_id: self.state.button_toggle.get(button_id, False) for button_id in PHYSICAL_BUTTON_IDS}
+        buttons = {
+            button_id: self.state.button_toggle.get(button_id, False)
+            for button_id in OUTPUT_PHYSICAL_BUTTON_IDS
+        }
         buttons.update(
             {button_id: self.state.virtual_button_toggle.get(button_id, False) for button_id in VIRTUAL_BUTTON_IDS}
         )
@@ -530,7 +593,7 @@ class ControllerPanel:
                 self.handle_axis_event(number, value)
 
     def handle_button_event(self, button_id: int, value: int, is_init: bool = False) -> None:
-        if button_id not in PHYSICAL_BUTTON_IDS:
+        if button_id not in OUTPUT_PHYSICAL_BUTTON_IDS:
             return
 
         was_pressed = self.state.button_physical.get(button_id, False)
@@ -545,7 +608,7 @@ class ControllerPanel:
         if is_pressed and not was_pressed:
             new_state = not self.state.button_toggle[button_id]
             self.state.button_toggle[button_id] = new_state
-            button_name = BUTTON_MAP.get(button_id, {}).get("name", BUTTON_NAMES.get(button_id, f"BUTTON_{button_id}"))
+            button_name = DISPLAY_BUTTON_MAP.get(button_id, {}).get("name", BUTTON_NAMES.get(button_id, f"BUTTON_{button_id}"))
             on_button_toggled(button_id, button_name, new_state)
 
     def handle_axis_event(self, axis_id: int, raw_value: int) -> None:
@@ -597,23 +660,25 @@ class ControllerPanel:
         self.draw_edge_guides()
         self.draw_virtual_buttons()
 
-        # 先画普通按钮，再画摇杆的小圆点，避免摇杆点被覆盖。
-        for button_id, spec in BUTTON_MAP.items():
+        for button_id, spec in DISPLAY_BUTTON_MAP.items():
             self.draw_button(button_id, spec)
 
-        self.draw_stick_dot("left", center_button_id=14, axis_x=0, axis_y=1)
-        self.draw_stick_dot("right", center_button_id=15, axis_x=2, axis_y=3)
+        self.draw_footer()
 
     def draw_header(self) -> None:
         device_color = "#6ee7a8" if self.state.connected else "#ff6b6b"
         metrics = self.udp_sender.snapshot_metrics()
-        host_ok = metrics.connected and not metrics.last_error
+        host_reachable, host_checked_at = self.host_monitor.snapshot()
+        host_fresh = host_checked_at > 0.0 and time.monotonic() - host_checked_at <= 2.5
+        host_ok = host_reachable and host_fresh
         host_color = "#6ee7a8" if host_ok else "#ff8b8b"
-        host_text = (
-            f"HOST connected -> {metrics.target_ip}:{metrics.target_port}"
-            if host_ok
-            else f"HOST disconnected -> {metrics.target_ip}:{metrics.target_port}"
-        )
+        if host_ok:
+            host_text = f"HOST connected -> {metrics.target_ip}:{metrics.target_port}"
+        elif not host_fresh:
+            host_text = f"HOST checking -> {metrics.target_ip}:{metrics.target_port}"
+            host_color = "#ffd447"
+        else:
+            host_text = f"HOST disconnected -> {metrics.target_ip}:{metrics.target_port}"
         device_text = self.state.status_text.splitlines()[0]
         self.canvas.create_text(
             self.x(640),
@@ -652,11 +717,11 @@ class ControllerPanel:
                 fill="#ffd447",
                 font=("DejaVu Sans", 14, "bold"),
             )
-        self.canvas.create_line(self.x(175), self.y(132), self.x(1105), self.y(132), fill="#242a32", width=2)
+        self.canvas.create_line(self.x(145), self.y(132), self.x(1135), self.y(132), fill="#242a32", width=2)
 
     def draw_edge_guides(self) -> None:
-        self.canvas.create_line(self.x(230), self.y(130), self.x(230), self.y(705), fill="#20262e", width=2)
-        self.canvas.create_line(self.x(1050), self.y(130), self.x(1050), self.y(705), fill="#20262e", width=2)
+        self.canvas.create_line(self.x(145), self.y(132), self.x(145), self.y(690), fill="#20262e", width=2)
+        self.canvas.create_line(self.x(1135), self.y(132), self.x(1135), self.y(690), fill="#20262e", width=2)
 
     def draw_virtual_buttons(self) -> None:
         for button_id, spec in VIRTUAL_BUTTON_MAP.items():
@@ -682,6 +747,38 @@ class ControllerPanel:
                 justify="center",
             )
 
+    def draw_footer(self) -> None:
+        for action, spec in FOOTER_TOUCH_BUTTONS.items():
+            fill = "#2c3440"
+            if action == "clear_estop":
+                outline = "#ffd447"
+            elif action == "exit_fullscreen":
+                outline = "#6ee7a8"
+            else:
+                outline = "#ff8b8b"
+            self.rounded_rect(
+                spec["x"],
+                spec["y"],
+                spec["x"] + spec["w"],
+                spec["y"] + spec["h"],
+                16,
+                fill=fill,
+                outline=outline,
+                width=2,
+            )
+            self.canvas.create_text(
+                self.x(spec["x"] + spec["w"] / 2),
+                self.y(spec["y"] + spec["h"] / 2),
+                text=self.footer_button_label(action, spec),
+                fill="#f2f4f8",
+                font=("DejaVu Sans", 15, "bold"),
+            )
+
+    def footer_button_label(self, action: str, spec: Dict) -> str:
+        if action == "exit_fullscreen":
+            return "EXIT FULLSCREEN" if self.fullscreen else "ENTER FULLSCREEN"
+        return spec["label"]
+
     def draw_button(self, button_id: int, spec: Dict) -> None:
         toggled = self.state.button_toggle.get(button_id, False)
         physical = self.state.button_physical.get(button_id, False)
@@ -690,7 +787,7 @@ class ControllerPanel:
         width = 3 if physical or toggled else 2
         shape = spec["shape"]
 
-        if shape in ("circle", "stick_circle"):
+        if shape == "circle":
             self.circle(spec["x"], spec["y"], spec["r"], fill=fill, outline=outline, width=width)
         elif shape == "rounded_rect":
             self.rounded_rect(
@@ -706,27 +803,23 @@ class ControllerPanel:
 
         self.draw_button_label(spec)
 
-        if shape == "stick_circle":
-            axis_x, axis_y = (0, 1) if button_id == 14 else (2, 3)
-            value_text = f"{self.state.axis_values[axis_x]: .2f}, {self.state.axis_values[axis_y]: .2f}"
-            self.canvas.create_text(
-                self.x(spec["x"]),
-                self.y(spec["y"] + spec["r"] + 20),
-                text=value_text,
-                fill="#c5ccd6",
-                font=("DejaVu Sans Mono", 10),
-            )
-
     def draw_button_label(self, spec: Dict) -> None:
         shape = spec["shape"]
-        if shape in ("circle", "stick_circle"):
+        if shape == "circle":
             cx = spec["x"]
             cy = spec["y"]
-            font_size = 16 if shape == "circle" else 18
+            font_size = 16
         else:
             cx = spec["x"] + spec["w"] / 2
             cy = spec["y"] + spec["h"] / 2
-            font_size = 13 if spec["w"] < 90 else 15
+            if spec["w"] < 35:
+                font_size = 9
+            elif spec["w"] < 60:
+                font_size = 11
+            elif spec["w"] < 90:
+                font_size = 13
+            else:
+                font_size = 15
 
         self.canvas.create_text(
             self.x(cx),
@@ -734,25 +827,6 @@ class ControllerPanel:
             text=spec["label"],
             fill="#f2f4f8",
             font=("DejaVu Sans", font_size, "bold"),
-        )
-
-    def draw_stick_dot(self, stick: str, center_button_id: int, axis_x: int, axis_y: int) -> None:
-        spec = BUTTON_MAP[center_button_id]
-        radius = spec["r"]
-        value_x = self.state.axis_values[axis_x]
-        value_y = self.state.axis_values[axis_y]
-        # Linux joystick Y 轴通常向下为正，屏幕坐标也向下为正，所以这里不反转。
-        dot_x = spec["x"] + value_x * radius * 0.68
-        dot_y = spec["y"] + value_y * radius * 0.68
-        self.circle(dot_x, dot_y, 16, fill="#dfe7f3", outline="#101216", width=3)
-
-        label = "Left Stick" if stick == "left" else "Right Stick"
-        self.canvas.create_text(
-            self.x(spec["x"]),
-            self.y(spec["y"] - spec["r"] - 20),
-            text=label,
-            fill="#9aa4b2",
-            font=("DejaVu Sans", 11, "bold"),
         )
 
     def circle(self, cx: float, cy: float, radius: float, **kwargs) -> None:
