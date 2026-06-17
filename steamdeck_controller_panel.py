@@ -71,14 +71,14 @@ JS_EVENT_INIT = 0x80
 JS_EVENT_SIZE = 8
 
 VIRTUAL_BUTTON_MAP = {
-    32: {"name": "VIRTUAL_ESTOP", "label": "Button1", "x": 153, "y": 150, "w": 237, "h": 260, "radius": 18},
-    33: {"name": "VIRTUAL_ENABLE", "label": "Button2", "x": 398, "y": 150, "w": 237, "h": 260, "radius": 18},
-    34: {"name": "VIRTUAL_LOW_SPEED", "label": "Button3", "x": 643, "y": 150, "w": 237, "h": 260, "radius": 18},
-    35: {"name": "VIRTUAL_HIGH_SPEED", "label": "Button4", "x": 888, "y": 150, "w": 237, "h": 260, "radius": 18},
-    36: {"name": "VIRTUAL_AUTO_MODE", "label": "Button5", "x": 153, "y": 418, "w": 237, "h": 260, "radius": 18},
-    37: {"name": "VIRTUAL_RESET", "label": "Button6", "x": 398, "y": 418, "w": 237, "h": 260, "radius": 18},
-    38: {"name": "VIRTUAL_AUX_1", "label": "Button7", "x": 643, "y": 418, "w": 237, "h": 260, "radius": 18},
-    39: {"name": "VIRTUAL_AUX_2", "label": "Button8", "x": 888, "y": 418, "w": 237, "h": 260, "radius": 18},
+    32: {"name": "Button1", "label": "Button1", "x": 153, "y": 150, "w": 237, "h": 260, "radius": 18},
+    33: {"name": "Button2", "label": "Button2", "x": 398, "y": 150, "w": 237, "h": 260, "radius": 18},
+    34: {"name": "Button3", "label": "Button3", "x": 643, "y": 150, "w": 237, "h": 260, "radius": 18},
+    35: {"name": "Button4", "label": "Button4", "x": 888, "y": 150, "w": 237, "h": 260, "radius": 18},
+    36: {"name": "Button5", "label": "Button5", "x": 153, "y": 418, "w": 237, "h": 260, "radius": 18},
+    37: {"name": "Button6", "label": "Button6", "x": 398, "y": 418, "w": 237, "h": 260, "radius": 18},
+    38: {"name": "Button7", "label": "Button7", "x": 643, "y": 418, "w": 237, "h": 260, "radius": 18},
+    39: {"name": "Button8", "label": "Button8", "x": 888, "y": 418, "w": 237, "h": 260, "radius": 18},
 }
 
 VIRTUAL_BUTTON_IDS = tuple(VIRTUAL_BUTTON_MAP)
@@ -130,10 +130,10 @@ DISPLAY_BUTTON_MAP = {
         "h": 48,
         "radius": 12,
     },
-    3: {"name": "A", "label": "A", "shape": "circle", "x": 1234, "y": 486, "r": 12},
-    4: {"name": "B", "label": "B", "shape": "circle", "x": 1260, "y": 459, "r": 12},
-    5: {"name": "X", "label": "X", "shape": "circle", "x": 1208, "y": 459, "r": 12},
-    6: {"name": "Y", "label": "Y", "shape": "circle", "x": 1234, "y": 432, "r": 12},
+    3: {"name": "A", "label": "A", "shape": "circle", "x": 1210, "y": 495, "r": 20},
+    4: {"name": "B", "label": "B", "shape": "circle", "x": 1245, "y": 460, "r": 20},
+    5: {"name": "X", "label": "X", "shape": "circle", "x": 1175, "y": 460, "r": 20},
+    6: {"name": "Y", "label": "Y", "shape": "circle", "x": 1210, "y": 425, "r": 20},
     7: {
         "name": "LB",
         "label": "LB",
@@ -398,7 +398,6 @@ class TouchReader(threading.Thread):
 
     def stop(self) -> None:
         self.stop_event.set()
-        self._close_device()
 
     def _close_device(self) -> None:
         if self.device is not None:
@@ -425,6 +424,7 @@ class TouchReader(threading.Thread):
         self.device_path = path
         try:
             self.device = InputDevice(path)
+            self._apply_device_transform_hints()
             self._configure_abs_ranges()
         except FileNotFoundError:
             message = f"TOUCH not found -> {path}"
@@ -474,6 +474,13 @@ class TouchReader(threading.Thread):
                 break
 
         self._close_device()
+
+    def _apply_device_transform_hints(self) -> None:
+        name = (self.device.name or "").lower()
+        if ("fts3528" in name or "2808:1015" in name) and not (self.swap_xy or self.invert_x or self.invert_y):
+            self.swap_xy = True
+            self.invert_x = True
+            print("[touch] applying Steam Deck FTS3528 transform hint: --touch-swap-xy --touch-invert-x")
 
     def find_touch_device(self) -> str:
         candidates: List[Tuple[int, str]] = []
@@ -741,10 +748,14 @@ class ControllerPanel:
         return self.touch_canvas_width, self.touch_canvas_height
 
     def handle_canvas_press(self, event: tk.Event) -> None:
+        if self.state.touch_connected:
+            return
         self.handle_canvas_touch_xy(float(event.x), float(event.y), source="mouse")
 
     def handle_canvas_release(self, event: tk.Event) -> None:
         _ = event
+        if self.state.touch_connected:
+            return
         self.active_touch_target = ""
 
     def handle_canvas_touch_xy(self, screen_x: float, screen_y: float, source: str = "touch") -> None:
