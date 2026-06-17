@@ -420,9 +420,7 @@ class ControllerPanel:
         self.calibration_deadline = 0.0
         self.calibration_samples: Dict[int, List[int]] = {i: [] for i in AXIS_MAP}
         self.virtual_button_until: Dict[int, float] = {}
-        self.last_touch_at = 0.0
-        self.last_touch_target = ""
-        self.touch_sequence_target = ""
+        self.active_touch_target = ""
 
         self.root.bind("<Escape>", self.exit_program)
         self.root.bind("<F11>", self.toggle_fullscreen)
@@ -431,8 +429,10 @@ class ControllerPanel:
         self.root.bind("<c>", self.recalibrate_axes)
         self.root.bind("<C>", self.recalibrate_axes)
         self.canvas.bind("<ButtonPress-1>", self.handle_canvas_press)
+        self.canvas.bind("<B1-Motion>", self.handle_canvas_press)
         self.canvas.bind("<ButtonRelease-1>", self.handle_canvas_release)
         self.root.bind("<ButtonPress-1>", self.handle_canvas_press, add="+")
+        self.root.bind("<B1-Motion>", self.handle_canvas_press, add="+")
         self.root.bind("<ButtonRelease-1>", self.handle_canvas_release, add="+")
         self.root.protocol("WM_DELETE_WINDOW", self.exit_program)
 
@@ -460,12 +460,13 @@ class ControllerPanel:
         print(f"[ui] fullscreen {mode}")
 
     def handle_canvas_press(self, event: tk.Event) -> None:
-        self.handle_canvas_touch(event, is_release=False)
+        self.handle_canvas_touch(event)
 
     def handle_canvas_release(self, event: tk.Event) -> None:
-        self.handle_canvas_touch(event, is_release=True)
+        _ = event
+        self.active_touch_target = ""
 
-    def handle_canvas_touch(self, event: tk.Event, is_release: bool = False) -> None:
+    def handle_canvas_touch(self, event: tk.Event) -> None:
         sx, sy, _s = self.scale()
         base_x = event.x / sx
         base_y = event.y / sy
@@ -478,7 +479,7 @@ class ControllerPanel:
             y2 = y1 + spec["h"]
             if x1 <= base_x <= x2 and y1 <= base_y <= y2:
                 target = f"virtual:{button_id}"
-                if self.should_ignore_touch(target, is_release):
+                if self.touch_already_handled(target):
                     return
                 self.toggle_virtual_button(button_id)
                 self.redraw_now()
@@ -491,7 +492,7 @@ class ControllerPanel:
             y2 = y1 + spec["h"]
             if x1 <= base_x <= x2 and y1 <= base_y <= y2:
                 target = f"footer:{action}"
-                if self.should_ignore_touch(target, is_release):
+                if self.touch_already_handled(target):
                     return
                 if action == "clear_estop":
                     self.trigger_clear_estop()
@@ -503,18 +504,11 @@ class ControllerPanel:
                     self.exit_program()
                 return
 
-    def should_ignore_touch(self, target: str, is_release: bool) -> bool:
-        if is_release and self.touch_sequence_target == target:
-            self.touch_sequence_target = ""
+    def touch_already_handled(self, target: str) -> bool:
+        if self.active_touch_target:
             return True
-
-        now = time.monotonic()
-        is_duplicate = target == self.last_touch_target and now - self.last_touch_at < 0.12
-        self.last_touch_target = target
-        self.last_touch_at = now
-        if not is_release:
-            self.touch_sequence_target = target
-        return is_duplicate
+        self.active_touch_target = target
+        return False
 
     def redraw_now(self) -> None:
         self.draw()
