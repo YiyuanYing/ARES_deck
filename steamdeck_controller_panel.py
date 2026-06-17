@@ -16,6 +16,7 @@ import os
 import argparse
 import platform
 import queue
+import select
 import statistics
 import struct
 import subprocess
@@ -23,7 +24,14 @@ import threading
 import time
 import tkinter as tk
 from dataclasses import dataclass, field
-from typing import Dict, List, Tuple
+from typing import Callable, Dict, List, Tuple
+
+try:
+    from evdev import InputDevice, ecodes, list_devices
+except ImportError:
+    InputDevice = None
+    ecodes = None
+    list_devices = None
 
 from controller_protocol import BUTTON_IDS, BUTTON_NAMES
 from controller_udp_sender import (
@@ -41,6 +49,10 @@ from controller_udp_sender import (
 # =========================
 
 DEVICE_PATH = "/dev/input/js0"
+TOUCH_DEVICE_PATH = ""
+TOUCH_SWAP_XY = False
+TOUCH_INVERT_X = False
+TOUCH_INVERT_Y = False
 DEADZONE = 0.20
 BASE_WIDTH = 1280
 BASE_HEIGHT = 800
@@ -264,6 +276,9 @@ class ControllerState:
     connected: bool = False
     status_text: str = f"{DEVICE_PATH} disconnected"
     status_is_error: bool = True
+    touch_connected: bool = False
+    touch_status_text: str = "TOUCH disabled"
+    touch_status_is_error: bool = False
 
 
 class JoystickReader(threading.Thread):
@@ -345,6 +360,244 @@ class JoystickReader(threading.Thread):
         self._close_device()
 
 
+class TouchReader(threading.Thread):
+    """后台读取 Linux evdev 触屏事件，绕开 Tkinter/libinput 鼠标转换延迟。"""
+
+    TOUCH_NAME_KEYWORDS = ("touch", "touchscreen", "valve", "steam deck")
+
+    def __init__(
+        self,
+        device_path: str,
+        event_queue: "queue.Queue[Tuple]",
+        swap_xy: bool = False,
+        invert_x: bool = False,
+        invert_y: bool = False,
+        debug_touch: bool = False,
+        screen_size_provider: Callable[[], Tuple[int, int]] | None = None,
+    ) -> None:
+        super().__init__(daemon=True)
+        self.device_path = device_path
+        self.event_queue = event_queue
+        self.swap_xy = swap_xy
+        self.invert_x = invert_x
+        self.invert_y = invert_y
+        self.debug_touch = debug_touch
+        self.screen_size_provider = screen_size_provider or (lambda: (BASE_WIDTH, BASE_HEIGHT))
+        self.stop_event = threading.Event()
+        self.device = None
+        self.x_code: int | None = None
+        self.y_code: int | None = None
+        self.min_x = 0
+        self.max_x = 1
+        self.min_y = 0
+        self.max_y = 1
+        self.raw_x: int | None = None
+        self.raw_y: int | None = None
+        self.touching = False
+        self.press_sent = False
+
+    def stop(self) -> None:
+        self.stop_event.set()
+        self._close_device()
+
+    def _close_device(self) -> None:
+        if self.device is not None:
+            try:
+                self.device.close()
+            except OSError:
+                pass
+            self.device = None
+
+    def run(self) -> None:
+        if InputDevice is None or ecodes is None or list_devices is None:
+            message = "TOUCH disabled: install evdev with `pip install evdev`"
+            print(f"[touch] {message}")
+            self.event_queue.put(("touch_status", False, message, True))
+            return
+
+        path = self.device_path or self.find_touch_device()
+        if not path:
+            message = "TOUCH not found; mouse fallback enabled"
+            print(f"[touch] {message}")
+            self.event_queue.put(("touch_status", False, message, False))
+            return
+
+        self.device_path = path
+        try:
+            self.device = InputDevice(path)
+            self._configure_abs_ranges()
+        except FileNotFoundError:
+            message = f"TOUCH not found -> {path}"
+            print(f"[touch] {message}")
+            self.event_queue.put(("touch_status", False, message, True))
+            return
+        except PermissionError:
+            message = (
+                f"TOUCH permission denied -> {path}; "
+                "run: sudo usermod -aG input $USER && sudo reboot"
+            )
+            print(f"[touch] {message}")
+            self.event_queue.put(("touch_status", False, message, True))
+            return
+        except OSError as exc:
+            message = f"TOUCH open failed -> {path}: {exc}"
+            print(f"[touch] {message}")
+            self.event_queue.put(("touch_status", False, message, True))
+            self._close_device()
+            return
+
+        message = f"TOUCH connected -> {path}"
+        print(f"[touch] {message} ({self.device.name})")
+        self.event_queue.put(("touch_status", True, message, False))
+
+        while not self.stop_event.is_set():
+            try:
+                readable, _writeable, _errors = select.select([self.device.fd], [], [], 0.05)
+            except (OSError, ValueError) as exc:
+                message = f"TOUCH disconnected -> {path}: {exc}"
+                print(f"[touch] {message}")
+                self.event_queue.put(("touch_status", False, message, True))
+                break
+
+            if not readable:
+                continue
+
+            try:
+                for event in self.device.read():
+                    self._handle_event(event)
+            except BlockingIOError:
+                continue
+            except OSError as exc:
+                message = f"TOUCH read failed -> {path}: {exc}"
+                print(f"[touch] {message}")
+                self.event_queue.put(("touch_status", False, message, True))
+                break
+
+        self._close_device()
+
+    def find_touch_device(self) -> str:
+        candidates: List[Tuple[int, str]] = []
+        for path in list_devices():
+            try:
+                device = InputDevice(path)
+                score = self._touch_device_score(device)
+                device.close()
+            except OSError:
+                continue
+            if score > 0:
+                candidates.append((score, path))
+
+        if not candidates:
+            return ""
+
+        candidates.sort(reverse=True)
+        chosen = candidates[0][1]
+        print(f"[touch] auto-selected {chosen}")
+        return chosen
+
+    def _touch_device_score(self, device) -> int:
+        caps = device.capabilities(absinfo=True)
+        abs_infos = self._abs_info_dict(caps)
+        key_codes = self._event_codes(caps, ecodes.EV_KEY)
+        abs_codes = set(abs_infos)
+
+        has_x = ecodes.ABS_X in abs_codes or ecodes.ABS_MT_POSITION_X in abs_codes
+        has_y = ecodes.ABS_Y in abs_codes or ecodes.ABS_MT_POSITION_Y in abs_codes
+        has_touch_key = ecodes.BTN_TOUCH in key_codes or ecodes.BTN_TOOL_FINGER in key_codes
+        has_mt = ecodes.ABS_MT_POSITION_X in abs_codes and ecodes.ABS_MT_POSITION_Y in abs_codes
+        if not (has_x and has_y and (has_touch_key or has_mt)):
+            return 0
+
+        name = (device.name or "").lower()
+        score = 10
+        if any(keyword in name for keyword in self.TOUCH_NAME_KEYWORDS):
+            score += 20
+        if has_mt:
+            score += 5
+        return score
+
+    def _configure_abs_ranges(self) -> None:
+        caps = self.device.capabilities(absinfo=True)
+        abs_infos = self._abs_info_dict(caps)
+        self.x_code = ecodes.ABS_MT_POSITION_X if ecodes.ABS_MT_POSITION_X in abs_infos else ecodes.ABS_X
+        self.y_code = ecodes.ABS_MT_POSITION_Y if ecodes.ABS_MT_POSITION_Y in abs_infos else ecodes.ABS_Y
+        if self.x_code not in abs_infos or self.y_code not in abs_infos:
+            raise OSError("touch device lacks ABS_X/ABS_Y position ranges")
+
+        x_info = abs_infos[self.x_code]
+        y_info = abs_infos[self.y_code]
+        self.min_x, self.max_x = int(x_info.min), int(x_info.max)
+        self.min_y, self.max_y = int(y_info.min), int(y_info.max)
+        if self.max_x == self.min_x or self.max_y == self.min_y:
+            raise OSError("touch device has invalid ABS coordinate range")
+
+    def _handle_event(self, event) -> None:
+        if event.type == ecodes.EV_ABS:
+            if event.code == self.x_code:
+                self.raw_x = int(event.value)
+            elif event.code == self.y_code:
+                self.raw_y = int(event.value)
+        elif event.type == ecodes.EV_KEY and event.code == ecodes.BTN_TOUCH:
+            if event.value:
+                self.touching = True
+                self.press_sent = False
+                self._emit_press_if_ready()
+                if self.debug_touch:
+                    print("[touch] down")
+            else:
+                self.touching = False
+                self.press_sent = False
+                self.event_queue.put(("touch_release",))
+                if self.debug_touch:
+                    print("[touch] up")
+        elif event.type == ecodes.EV_SYN and event.code == ecodes.SYN_REPORT:
+            if self.touching:
+                self._emit_press_if_ready()
+
+    def _emit_press_if_ready(self) -> None:
+        if self.press_sent or self.raw_x is None or self.raw_y is None:
+            return
+
+        screen_x, screen_y = self.map_raw_to_screen(self.raw_x, self.raw_y)
+        self.event_queue.put(("touch_press", screen_x, screen_y))
+        self.press_sent = True
+        if self.debug_touch:
+            print(
+                f"[touch] raw=({self.raw_x},{self.raw_y}) "
+                f"screen=({screen_x:.1f},{screen_y:.1f})"
+            )
+
+    def map_raw_to_screen(self, raw_x: int, raw_y: int) -> Tuple[float, float]:
+        width_value, height_value = self.screen_size_provider()
+        width = float(max(width_value, 1))
+        height = float(max(height_value, 1))
+        norm_x = (raw_x - self.min_x) / float(self.max_x - self.min_x)
+        norm_y = (raw_y - self.min_y) / float(self.max_y - self.min_y)
+        norm_x = max(0.0, min(1.0, norm_x))
+        norm_y = max(0.0, min(1.0, norm_y))
+        if self.invert_x:
+            norm_x = 1.0 - norm_x
+        if self.invert_y:
+            norm_y = 1.0 - norm_y
+        if self.swap_xy:
+            norm_x, norm_y = norm_y, norm_x
+        return norm_x * width, norm_y * height
+
+    @staticmethod
+    def _abs_info_dict(caps) -> Dict[int, object]:
+        return {int(code): info for code, info in caps.get(ecodes.EV_ABS, [])}
+
+    @staticmethod
+    def _event_codes(caps, event_type: int) -> set:
+        codes = set()
+        for item in caps.get(event_type, []):
+            if isinstance(item, tuple):
+                codes.add(int(item[0]))
+            else:
+                codes.add(int(item))
+        return codes
+
+
 class HostReachabilityMonitor(threading.Thread):
     """后台 ping 目标主机，避免 UDP socket 在线但主机实际断开的假绿状态。"""
 
@@ -392,6 +645,12 @@ class ControllerPanel:
         udp_port: int,
         send_hz: float,
         failsafe_timeout_ms: int,
+        touch_device: str,
+        no_touch_reader: bool,
+        touch_swap_xy: bool,
+        touch_invert_x: bool,
+        touch_invert_y: bool,
+        debug_touch: bool,
     ) -> None:
         self.root = tk.Tk()
         self.root.title("SUSTECH-ARES ROBOCON2026")
@@ -406,6 +665,22 @@ class ControllerPanel:
         self.state = ControllerState()
         self.event_queue: "queue.Queue[Tuple]" = queue.Queue()
         self.reader = JoystickReader(DEVICE_PATH, self.event_queue)
+        self.touch_canvas_width = BASE_WIDTH
+        self.touch_canvas_height = BASE_HEIGHT
+        self.touch_reader = None
+        if no_touch_reader:
+            self.state.touch_status_text = "TOUCH disabled"
+            print("[touch] TOUCH disabled by --no-touch-reader")
+        else:
+            self.touch_reader = TouchReader(
+                touch_device,
+                self.event_queue,
+                swap_xy=touch_swap_xy,
+                invert_x=touch_invert_x,
+                invert_y=touch_invert_y,
+                debug_touch=debug_touch,
+                screen_size_provider=self.get_touch_canvas_size,
+            )
         self.host_monitor = HostReachabilityMonitor(remote_ip)
         self.udp_sender = ControllerUdpSender(
             state_provider=self.get_controller_snapshot,
@@ -417,6 +692,7 @@ class ControllerPanel:
         )
 
         self.calibrating = False
+        self.debug_touch = debug_touch
         self.calibration_deadline = 0.0
         self.calibration_samples: Dict[int, List[int]] = {i: [] for i in AXIS_MAP}
         self.virtual_button_until: Dict[int, float] = {}
@@ -431,13 +707,12 @@ class ControllerPanel:
         self.canvas.bind("<ButtonPress-1>", self.handle_canvas_press)
         self.canvas.bind("<B1-Motion>", self.handle_canvas_press)
         self.canvas.bind("<ButtonRelease-1>", self.handle_canvas_release)
-        self.root.bind("<ButtonPress-1>", self.handle_canvas_press, add="+")
-        self.root.bind("<B1-Motion>", self.handle_canvas_press, add="+")
-        self.root.bind("<ButtonRelease-1>", self.handle_canvas_release, add="+")
         self.root.protocol("WM_DELETE_WINDOW", self.exit_program)
 
     def run(self) -> None:
         self.reader.start()
+        if self.touch_reader is not None:
+            self.touch_reader.start()
         self.host_monitor.start()
         self.udp_sender.start()
         self.begin_calibration("startup")
@@ -449,6 +724,9 @@ class ControllerPanel:
         self.udp_sender.stop()
         self.host_monitor.stop()
         self.reader.stop()
+        if self.touch_reader is not None:
+            self.touch_reader.stop()
+            self.touch_reader.join(timeout=1.0)
         self.host_monitor.join(timeout=1.0)
         self.reader.join(timeout=1.0)
         self.root.destroy()
@@ -459,19 +737,21 @@ class ControllerPanel:
         mode = "enabled" if self.fullscreen else "disabled"
         print(f"[ui] fullscreen {mode}")
 
+    def get_touch_canvas_size(self) -> Tuple[int, int]:
+        return self.touch_canvas_width, self.touch_canvas_height
+
     def handle_canvas_press(self, event: tk.Event) -> None:
-        self.handle_canvas_touch(event)
+        self.handle_canvas_touch_xy(float(event.x), float(event.y), source="mouse")
 
     def handle_canvas_release(self, event: tk.Event) -> None:
         _ = event
         self.active_touch_target = ""
 
-    def handle_canvas_touch(self, event: tk.Event) -> None:
+    def handle_canvas_touch_xy(self, screen_x: float, screen_y: float, source: str = "touch") -> None:
         sx, sy, _s = self.scale()
-        base_x = event.x / sx
-        base_y = event.y / sy
+        base_x = screen_x / sx
+        base_y = screen_y / sy
 
-        # Steam Deck 触屏会映射成鼠标点击事件；这里直接用基础坐标做命中检测。
         for button_id, spec in VIRTUAL_BUTTON_MAP.items():
             x1 = spec["x"]
             y1 = spec["y"]
@@ -482,6 +762,8 @@ class ControllerPanel:
                 if self.touch_already_handled(target):
                     return
                 self.toggle_virtual_button(button_id)
+                if self.debug_touch:
+                    print(f"[touch] {source} hit {target} at ({screen_x:.1f},{screen_y:.1f})")
                 self.redraw_now()
                 return
 
@@ -502,6 +784,8 @@ class ControllerPanel:
                     self.redraw_now()
                 elif action == "exit_app":
                     self.exit_program()
+                if self.debug_touch:
+                    print(f"[touch] {source} hit {target} at ({screen_x:.1f},{screen_y:.1f})")
                 return
 
     def touch_already_handled(self, target: str) -> bool:
@@ -612,6 +896,22 @@ class ControllerPanel:
                 self.state.status_is_error = not connected
                 continue
 
+            if kind == "touch_status":
+                _kind, connected, message, is_error = item
+                self.state.touch_connected = bool(connected)
+                self.state.touch_status_text = str(message)
+                self.state.touch_status_is_error = bool(is_error)
+                continue
+
+            if kind == "touch_press":
+                _kind, screen_x, screen_y = item
+                self.handle_canvas_touch_xy(float(screen_x), float(screen_y), source="evdev")
+                continue
+
+            if kind == "touch_release":
+                self.active_touch_target = ""
+                continue
+
             if kind != "js_event":
                 continue
 
@@ -687,6 +987,8 @@ class ControllerPanel:
         self.canvas.delete("all")
         width = self.canvas.winfo_width()
         height = self.canvas.winfo_height()
+        self.touch_canvas_width = max(width, 1)
+        self.touch_canvas_height = max(height, 1)
         self.canvas.create_rectangle(0, 0, width, height, fill="#111418", outline="")
 
         self.draw_header()
@@ -749,6 +1051,20 @@ class ControllerPanel:
                 text="Calibrating stick centers...",
                 fill="#ffd447",
                 font=("DejaVu Sans", 14, "bold"),
+            )
+        else:
+            if self.state.touch_connected:
+                touch_color = "#6ee7a8"
+            elif self.state.touch_status_is_error:
+                touch_color = "#ff8b8b"
+            else:
+                touch_color = "#ffd447"
+            self.canvas.create_text(
+                self.x(640),
+                self.y(112),
+                text=self.state.touch_status_text[:96],
+                fill=touch_color,
+                font=("DejaVu Sans Mono", 11),
             )
         self.canvas.create_line(self.x(145), self.y(132), self.x(1135), self.y(132), fill="#242a32", width=2)
 
@@ -911,12 +1227,30 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--port", type=int, default=DEFAULT_UDP_PORT, help="UDP receiver port.")
     parser.add_argument("--send-hz", type=float, default=UDP_SEND_HZ, help="Controller packets per second.")
     parser.add_argument("--failsafe-timeout-ms", type=int, default=FAILSAFE_TIMEOUT_MS, help="Failsafe timeout encoded in each frame.")
+    parser.add_argument("--touch-device", default=TOUCH_DEVICE_PATH, help="Linux evdev touchscreen path, e.g. /dev/input/event4.")
+    parser.add_argument("--no-touch-reader", action="store_true", help="Disable evdev touchscreen reader; keep mouse fallback.")
+    parser.add_argument("--touch-swap-xy", action="store_true", default=TOUCH_SWAP_XY, help="Swap touchscreen X/Y axes.")
+    parser.add_argument("--touch-invert-x", action="store_true", default=TOUCH_INVERT_X, help="Invert touchscreen X axis.")
+    parser.add_argument("--touch-invert-y", action="store_true", default=TOUCH_INVERT_Y, help="Invert touchscreen Y axis.")
+    parser.add_argument("--debug-touch", action="store_true", help="Print raw and mapped touchscreen coordinates.")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    panel = ControllerPanel(args.local_ip, args.remote_ip, args.port, args.send_hz, args.failsafe_timeout_ms)
+    panel = ControllerPanel(
+        args.local_ip,
+        args.remote_ip,
+        args.port,
+        args.send_hz,
+        args.failsafe_timeout_ms,
+        args.touch_device,
+        args.no_touch_reader,
+        args.touch_swap_xy,
+        args.touch_invert_x,
+        args.touch_invert_y,
+        args.debug_touch,
+    )
     panel.run()
 
 
