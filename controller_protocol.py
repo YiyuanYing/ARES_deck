@@ -64,6 +64,8 @@ BUTTON_NAMES = {
     35: "VIRTUAL_HIGH_SPEED",
     36: "VIRTUAL_AUTO_MODE",
     37: "VIRTUAL_RESET",
+    38: "VIRTUAL_AUX_1",
+    39: "VIRTUAL_AUX_2",
 }
 BUTTON_IDS = {name: button_id for button_id, name in BUTTON_NAMES.items()}
 

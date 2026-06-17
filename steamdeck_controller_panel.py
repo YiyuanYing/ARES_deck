@@ -5,8 +5,8 @@ Steam Deck 本地图形化手柄状态面板。
 
 特点：
 - 不依赖浏览器/Steam Input/网页 UI，直接读取 Linux joystick 接口 /dev/input/js0。
-- 使用 Tkinter Canvas，全屏显示 Steam Deck 俯视图风格的按钮和摇杆状态。
-- 按钮使用 toggle 显示：上升沿切换绿色激活状态，物理按住时显示黄色描边。
+- 使用 Tkinter Canvas，全屏显示边缘实体按键状态和中间触屏虚拟按键。
+- 实体按键边缘映射绿色表示当前按下；触屏虚拟按键绿色表示持续发送对应 bit。
 - 预留 on_button_toggled / on_axis_updated，后续可在其中加入串口、UDP、ROS2 等机器人通信。
 """
 
@@ -56,28 +56,18 @@ JS_EVENT_AXIS = 0x02
 JS_EVENT_INIT = 0x80
 JS_EVENT_SIZE = 8
 
-FOOTER_TOUCH_BUTTONS = {
-    "clear_estop": {
-        "label": "CLEAR ESTOP",
-        "x": 250,
-        "y": 724,
-        "w": 230,
-        "h": 54,
-    },
-    "exit_fullscreen": {
-        "x": 525,
-        "y": 724,
-        "w": 230,
-        "h": 54,
-    },
-    "exit_app": {
-        "label": "EXIT APP",
-        "x": 800,
-        "y": 724,
-        "w": 230,
-        "h": 54,
-    },
+VIRTUAL_BUTTON_MAP = {
+    32: {"name": "VIRTUAL_ESTOP", "label": "ESTOP", "x": 255, "y": 210, "w": 170, "h": 145, "radius": 18},
+    33: {"name": "VIRTUAL_ENABLE", "label": "ENABLE", "x": 455, "y": 210, "w": 170, "h": 145, "radius": 18},
+    34: {"name": "VIRTUAL_LOW_SPEED", "label": "LOW\nSPEED", "x": 655, "y": 210, "w": 170, "h": 145, "radius": 18},
+    35: {"name": "VIRTUAL_HIGH_SPEED", "label": "HIGH\nSPEED", "x": 855, "y": 210, "w": 170, "h": 145, "radius": 18},
+    36: {"name": "VIRTUAL_AUTO_MODE", "label": "AUTO\nMODE", "x": 255, "y": 420, "w": 170, "h": 145, "radius": 18},
+    37: {"name": "VIRTUAL_RESET", "label": "RESET", "x": 455, "y": 420, "w": 170, "h": 145, "radius": 18},
+    38: {"name": "VIRTUAL_AUX_1", "label": "AUX 1", "x": 655, "y": 420, "w": 170, "h": 145, "radius": 18},
+    39: {"name": "VIRTUAL_AUX_2", "label": "AUX 2", "x": 855, "y": 420, "w": 170, "h": 145, "radius": 18},
 }
+
+VIRTUAL_BUTTON_IDS = tuple(VIRTUAL_BUTTON_MAP)
 
 
 # =========================
@@ -93,134 +83,154 @@ AXIS_MAP = {
 }
 
 BUTTON_MAP = {
+    0: {
+        "name": "Left Trackpad",
+        "label": "LPAD",
+        "shape": "rounded_rect",
+        "x": 20,
+        "y": 665,
+        "w": 120,
+        "h": 42,
+        "radius": 12,
+    },
+    1: {
+        "name": "Right Trackpad",
+        "label": "RPAD",
+        "shape": "rounded_rect",
+        "x": 1140,
+        "y": 665,
+        "w": 120,
+        "h": 42,
+        "radius": 12,
+    },
     2: {
         "name": "Quick Access / ...",
         "label": "...",
         "shape": "rounded_rect",
-        "x": 705,
-        "y": 625,
+        "x": 690,
+        "y": 705,
         "w": 80,
-        "h": 46,
-        "radius": 16,
+        "h": 42,
+        "radius": 12,
     },
-    3: {"name": "A", "label": "A", "shape": "circle", "x": 1040, "y": 310, "r": 30},
-    4: {"name": "B", "label": "B", "shape": "circle", "x": 1090, "y": 260, "r": 30},
-    5: {"name": "X", "label": "X", "shape": "circle", "x": 990, "y": 260, "r": 30},
-    6: {"name": "Y", "label": "Y", "shape": "circle", "x": 1040, "y": 210, "r": 30},
+    3: {"name": "A", "label": "A", "shape": "circle", "x": 1115, "y": 265, "r": 26},
+    4: {"name": "B", "label": "B", "shape": "circle", "x": 1160, "y": 220, "r": 26},
+    5: {"name": "X", "label": "X", "shape": "circle", "x": 1070, "y": 220, "r": 26},
+    6: {"name": "Y", "label": "Y", "shape": "circle", "x": 1115, "y": 175, "r": 26},
     7: {
         "name": "LB",
         "label": "LB",
         "shape": "rounded_rect",
-        "x": 90,
-        "y": 105,
-        "w": 220,
-        "h": 46,
-        "radius": 14,
+        "x": 20,
+        "y": 108,
+        "w": 120,
+        "h": 38,
+        "radius": 12,
     },
     8: {
         "name": "RB",
         "label": "RB",
         "shape": "rounded_rect",
-        "x": 970,
-        "y": 105,
-        "w": 220,
-        "h": 46,
-        "radius": 14,
+        "x": 1140,
+        "y": 108,
+        "w": 120,
+        "h": 38,
+        "radius": 12,
     },
     9: {
         "name": "LT Full Press",
         "label": "LT",
         "shape": "rounded_rect",
-        "x": 90,
-        "y": 48,
-        "w": 220,
-        "h": 44,
-        "radius": 14,
+        "x": 20,
+        "y": 62,
+        "w": 120,
+        "h": 38,
+        "radius": 12,
     },
     10: {
         "name": "RT Full Press",
         "label": "RT",
         "shape": "rounded_rect",
-        "x": 970,
-        "y": 48,
-        "w": 220,
-        "h": 44,
-        "radius": 14,
+        "x": 1140,
+        "y": 62,
+        "w": 120,
+        "h": 38,
+        "radius": 12,
     },
     11: {
         "name": "View / Select",
         "label": "VIEW",
         "shape": "rounded_rect",
-        "x": 455,
-        "y": 205,
+        "x": 510,
+        "y": 705,
         "w": 82,
         "h": 42,
-        "radius": 14,
+        "radius": 12,
     },
     12: {
         "name": "Menu / Start",
         "label": "MENU",
         "shape": "rounded_rect",
-        "x": 743,
-        "y": 205,
+        "x": 610,
+        "y": 705,
         "w": 82,
         "h": 42,
-        "radius": 14,
+        "radius": 12,
     },
     13: {
         "name": "Steam",
         "label": "STEAM",
         "shape": "rounded_rect",
-        "x": 495,
-        "y": 625,
-        "w": 100,
-        "h": 46,
-        "radius": 16,
+        "x": 410,
+        "y": 705,
+        "w": 90,
+        "h": 42,
+        "radius": 12,
     },
-    14: {"name": "L3", "label": "L3", "shape": "stick_circle", "x": 300, "y": 265, "r": 88},
-    15: {"name": "R3", "label": "R3", "shape": "stick_circle", "x": 980, "y": 420, "r": 88},
-    16: {"name": "D-pad Up", "label": "UP", "shape": "rounded_rect", "x": 210, "y": 386, "w": 62, "h": 56, "radius": 10},
-    17: {"name": "D-pad Down", "label": "DOWN", "shape": "rounded_rect", "x": 210, "y": 504, "w": 62, "h": 56, "radius": 10},
-    18: {"name": "D-pad Left", "label": "LEFT", "shape": "rounded_rect", "x": 151, "y": 445, "w": 62, "h": 56, "radius": 10},
-    19: {"name": "D-pad Right", "label": "RIGHT", "shape": "rounded_rect", "x": 269, "y": 445, "w": 62, "h": 56, "radius": 10},
+    14: {"name": "L3", "label": "L3", "shape": "stick_circle", "x": 98, "y": 600, "r": 52},
+    15: {"name": "R3", "label": "R3", "shape": "stick_circle", "x": 1182, "y": 600, "r": 52},
+    16: {"name": "D-pad Up", "label": "UP", "shape": "rounded_rect", "x": 92, "y": 360, "w": 58, "h": 50, "radius": 10},
+    17: {"name": "D-pad Down", "label": "DOWN", "shape": "rounded_rect", "x": 92, "y": 468, "w": 58, "h": 50, "radius": 10},
+    18: {"name": "D-pad Left", "label": "LEFT", "shape": "rounded_rect", "x": 32, "y": 414, "w": 58, "h": 50, "radius": 10},
+    19: {"name": "D-pad Right", "label": "RIGHT", "shape": "rounded_rect", "x": 152, "y": 414, "w": 58, "h": 50, "radius": 10},
     20: {
         "name": "L4",
         "label": "L4",
         "shape": "rounded_rect",
-        "x": 22,
-        "y": 230,
+        "x": 20,
+        "y": 205,
         "w": 70,
-        "h": 104,
+        "h": 98,
         "radius": 18,
     },
     21: {
         "name": "R4",
         "label": "R4",
         "shape": "rounded_rect",
-        "x": 1188,
-        "y": 230,
+        "x": 1190,
+        "y": 205,
         "w": 70,
-        "h": 104,
+        "h": 98,
         "radius": 18,
     },
     22: {
         "name": "L5",
         "label": "L5",
         "shape": "rounded_rect",
-        "x": 22,
-        "y": 456,
+        "x": 20,
+        "y": 540,
         "w": 70,
-        "h": 104,
+        "h": 98,
         "radius": 18,
     },
     23: {
         "name": "R5",
         "label": "R5",
         "shape": "rounded_rect",
-        "x": 1188,
-        "y": 456,
+        "x": 1190,
+        "y": 540,
         "w": 70,
-        "h": 104,
+        "h": 98,
         "radius": 18,
     },
 }
@@ -244,6 +254,7 @@ class ControllerState:
 
     button_physical: Dict[int, bool] = field(default_factory=lambda: {i: False for i in PHYSICAL_BUTTON_IDS})
     button_toggle: Dict[int, bool] = field(default_factory=lambda: {i: False for i in PHYSICAL_BUTTON_IDS})
+    virtual_button_toggle: Dict[int, bool] = field(default_factory=lambda: {i: False for i in VIRTUAL_BUTTON_IDS})
     raw_axes: Dict[int, int] = field(default_factory=lambda: {i: 0 for i in AXIS_MAP})
     axis_values: Dict[int, float] = field(default_factory=lambda: {i: 0.0 for i in AXIS_MAP})
     center_offsets: Dict[int, float] = field(default_factory=lambda: {i: 0.0 for i in AXIS_MAP})
@@ -341,7 +352,7 @@ class ControllerPanel:
         failsafe_timeout_ms: int,
     ) -> None:
         self.root = tk.Tk()
-        self.root.title("Steam Deck Controller Panel")
+        self.root.title("SUSTECH-ARES ROBOCON2026")
         self.root.configure(bg="#111418")
         self.root.geometry(f"{BASE_WIDTH}x{BASE_HEIGHT}")
         self.fullscreen = True
@@ -402,19 +413,21 @@ class ControllerPanel:
         base_y = event.y / sy
 
         # Steam Deck 触屏会映射成鼠标点击事件；这里直接用基础坐标做命中检测。
-        for action, spec in FOOTER_TOUCH_BUTTONS.items():
+        for button_id, spec in VIRTUAL_BUTTON_MAP.items():
             x1 = spec["x"]
             y1 = spec["y"]
             x2 = x1 + spec["w"]
             y2 = y1 + spec["h"]
             if x1 <= base_x <= x2 and y1 <= base_y <= y2:
-                if action == "clear_estop":
-                    self.trigger_clear_estop()
-                elif action == "exit_fullscreen":
-                    self.toggle_fullscreen()
-                elif action == "exit_app":
-                    self.exit_program()
+                self.toggle_virtual_button(button_id)
                 return
+
+    def toggle_virtual_button(self, button_id: int) -> None:
+        new_state = not self.state.virtual_button_toggle.get(button_id, False)
+        self.state.virtual_button_toggle[button_id] = new_state
+        spec = VIRTUAL_BUTTON_MAP.get(button_id, {})
+        button_name = spec.get("name", BUTTON_NAMES.get(button_id, f"BUTTON_{button_id}"))
+        print(f"[virtual] {button_id:02d} {button_name} toggled -> {new_state}")
 
     def trigger_clear_estop(self) -> None:
         reset_button_id = BUTTON_IDS["VIRTUAL_RESET"]
@@ -424,6 +437,8 @@ class ControllerPanel:
     def reset_toggles(self, _event: tk.Event | None = None) -> None:
         for button_id in self.state.button_toggle:
             self.state.button_toggle[button_id] = False
+        for button_id in self.state.virtual_button_toggle:
+            self.state.virtual_button_toggle[button_id] = False
         print("[button] all toggle states cleared")
 
     def recalibrate_axes(self, _event: tk.Event | None = None) -> None:
@@ -459,11 +474,13 @@ class ControllerPanel:
         self.root.after(REFRESH_MS, self.update_loop)
 
     def get_controller_snapshot(self) -> dict:
-        # UDP 发送 toggle 状态：按一下锁存为 True，再按一下解除，类似航模遥控器拨杆。
-        # 黄色描边仍然只表示当前 physical pressed；绿色按钮才会进入控制帧 bitmask。
-        # TODO: 后续可把屏幕触摸按钮映射到 32~95 的 virtual buttons。
+        # UDP 发送锁存状态：实体键沿用按一下切换一次，屏幕虚拟键用中间大按钮切换。
+        # 边缘实体键绿色只表示当前 physical pressed，不影响原有实体键锁存发送逻辑。
         now = time.monotonic()
         buttons = {button_id: self.state.button_toggle.get(button_id, False) for button_id in PHYSICAL_BUTTON_IDS}
+        buttons.update(
+            {button_id: self.state.virtual_button_toggle.get(button_id, False) for button_id in VIRTUAL_BUTTON_IDS}
+        )
         expired_virtual_buttons = []
         for button_id, active_until in self.virtual_button_until.items():
             active = now <= active_until
@@ -577,8 +594,8 @@ class ControllerPanel:
         self.canvas.create_rectangle(0, 0, width, height, fill="#111418", outline="")
 
         self.draw_header()
-        self.draw_deck_outline()
-        self.draw_network_panel()
+        self.draw_edge_guides()
+        self.draw_virtual_buttons()
 
         # 先画普通按钮，再画摇杆的小圆点，避免摇杆点被覆盖。
         for button_id, spec in BUTTON_MAP.items():
@@ -586,28 +603,43 @@ class ControllerPanel:
 
         self.draw_stick_dot("left", center_button_id=14, axis_x=0, axis_y=1)
         self.draw_stick_dot("right", center_button_id=15, axis_x=2, axis_y=3)
-        self.draw_footer()
 
     def draw_header(self) -> None:
-        status_color = "#6ee7a8" if self.state.connected else "#ff6b6b"
+        device_color = "#6ee7a8" if self.state.connected else "#ff6b6b"
+        metrics = self.udp_sender.snapshot_metrics()
+        host_ok = metrics.connected and not metrics.last_error
+        host_color = "#6ee7a8" if host_ok else "#ff8b8b"
+        host_text = (
+            f"HOST connected -> {metrics.target_ip}:{metrics.target_port}"
+            if host_ok
+            else f"HOST disconnected -> {metrics.target_ip}:{metrics.target_port}"
+        )
+        device_text = self.state.status_text.splitlines()[0]
         self.canvas.create_text(
             self.x(640),
-            self.y(42),
-            text="Steam Deck Controller Panel",
+            self.y(36),
+            text="SUSTECH-ARES ROBOCON2026",
             fill="#f2f4f8",
-            font=("DejaVu Sans", 26, "bold"),
+            font=("DejaVu Sans", 25, "bold"),
         )
         self.canvas.create_text(
-            self.x(640),
+            self.x(465),
             self.y(78),
-            text=self.state.status_text,
-            fill=status_color,
-            font=("DejaVu Sans", 15, "bold"),
+            text=device_text,
+            fill=device_color,
+            font=("DejaVu Sans", 14, "bold"),
+        )
+        self.canvas.create_text(
+            self.x(820),
+            self.y(78),
+            text=host_text,
+            fill=host_color,
+            font=("DejaVu Sans", 14, "bold"),
         )
         if self.state.status_is_error:
             self.canvas.create_text(
                 self.x(640),
-                self.y(119),
+                self.y(112),
                 text="sudo usermod -aG input $USER    sudo reboot",
                 fill="#ff9d9d",
                 font=("DejaVu Sans Mono", 13),
@@ -615,130 +647,47 @@ class ControllerPanel:
         elif self.calibrating:
             self.canvas.create_text(
                 self.x(640),
-                self.y(119),
+                self.y(112),
                 text="Calibrating stick centers...",
                 fill="#ffd447",
                 font=("DejaVu Sans", 14, "bold"),
             )
+        self.canvas.create_line(self.x(175), self.y(132), self.x(1105), self.y(132), fill="#242a32", width=2)
 
-        self.canvas.create_text(
-            self.x(640),
-            self.y(165),
-            text=time.strftime("%Y-%m-%d %H:%M:%S"),
-            fill="#9aa4b2",
-            font=("DejaVu Sans Mono", 14),
-        )
+    def draw_edge_guides(self) -> None:
+        self.canvas.create_line(self.x(230), self.y(130), self.x(230), self.y(705), fill="#20262e", width=2)
+        self.canvas.create_line(self.x(1050), self.y(130), self.x(1050), self.y(705), fill="#20262e", width=2)
 
-    def draw_footer(self) -> None:
-        for action, spec in FOOTER_TOUCH_BUTTONS.items():
-            fill = "#2c3440"
-            if action == "clear_estop":
-                outline = "#ffd447"
-            elif action == "exit_fullscreen":
-                outline = "#6ee7a8"
-            else:
-                outline = "#ff8b8b"
+    def draw_virtual_buttons(self) -> None:
+        for button_id, spec in VIRTUAL_BUTTON_MAP.items():
+            active = self.state.virtual_button_toggle.get(button_id, False)
+            fill = "#1fbf75" if active else "#29313a"
+            outline = "#7df0b4" if active else "#596575"
             self.rounded_rect(
                 spec["x"],
                 spec["y"],
                 spec["x"] + spec["w"],
                 spec["y"] + spec["h"],
-                16,
+                spec["radius"],
                 fill=fill,
                 outline=outline,
-                width=2,
+                width=3,
             )
             self.canvas.create_text(
                 self.x(spec["x"] + spec["w"] / 2),
                 self.y(spec["y"] + spec["h"] / 2),
-                text=self.footer_button_label(action, spec),
+                text=spec["label"],
                 fill="#f2f4f8",
-                font=("DejaVu Sans", 15, "bold"),
-            )
-
-    def footer_button_label(self, action: str, spec: Dict) -> str:
-        if action == "exit_fullscreen":
-            return "EXIT FULLSCREEN" if self.fullscreen else "ENTER FULLSCREEN"
-        return spec["label"]
-
-    def draw_deck_outline(self) -> None:
-        # 一条低调的外轮廓，帮助形成 Steam Deck 俯视图的空间关系。
-        self.rounded_rect(120, 145, 1160, 705, 96, fill="", outline="#2a3038", width=3)
-        self.rounded_rect(470, 285, 810, 585, 30, fill="", outline="#252b33", width=2)
-
-    def draw_network_panel(self) -> None:
-        metrics = self.udp_sender.snapshot_metrics()
-        status_color = "#6ee7a8" if metrics.connected else "#ffd447"
-        if not metrics.enabled or metrics.last_error:
-            status_color = "#ff8b8b"
-
-        self.rounded_rect(482, 300, 798, 570, 24, fill="#14181e", outline="#2d3540", width=2)
-        self.canvas.create_text(
-            self.x(640),
-            self.y(324),
-            text="CONTROLLERFRAME V2",
-            fill="#f2f4f8",
-            font=("DejaVu Sans", 14, "bold"),
-        )
-        self.canvas.create_text(
-            self.x(640),
-            self.y(350),
-            text=metrics.status_text,
-            fill=status_color,
-            font=("DejaVu Sans", 12, "bold"),
-        )
-
-        rows = [
-            ("local", metrics.local_ip),
-            ("bind", f"{metrics.bind_ip}:auto"),
-            ("target", f"{metrics.target_ip}:{metrics.target_port}"),
-            ("mode", "100Hz UDP binary"),
-            ("tx", f"{metrics.tx_rate:4.0f}/s"),
-            ("seq", f"{metrics.seq}"),
-            ("payload", f"{metrics.payload_bytes} bytes"),
-            ("buttons", f"{sum(1 for value in metrics.latest_buttons.values() if value)} physical"),
-            (
-                "axes",
-                f"{metrics.latest_axes.get('lx', 0.0):+.2f},{metrics.latest_axes.get('ly', 0.0):+.2f} "
-                f"{metrics.latest_axes.get('rx', 0.0):+.2f},{metrics.latest_axes.get('ry', 0.0):+.2f}",
-            ),
-        ]
-        y = 382
-        for label, value in rows:
-            self.canvas.create_text(
-                self.x(508),
-                self.y(y),
-                text=label,
-                anchor="w",
-                fill="#8f99a8",
-                font=("DejaVu Sans Mono", 10),
-            )
-            self.canvas.create_text(
-                self.x(608),
-                self.y(y),
-                text=value,
-                anchor="w",
-                fill="#d9e2ef",
-                font=("DejaVu Sans Mono", 10),
-            )
-            y += 19
-
-        if metrics.last_error:
-            error_text = metrics.last_error[:42]
-            self.canvas.create_text(
-                self.x(640),
-                self.y(555),
-                text=error_text,
-                fill="#ff9d9d",
-                font=("DejaVu Sans Mono", 9),
+                font=("DejaVu Sans", 18, "bold"),
+                justify="center",
             )
 
     def draw_button(self, button_id: int, spec: Dict) -> None:
         toggled = self.state.button_toggle.get(button_id, False)
         physical = self.state.button_physical.get(button_id, False)
-        fill = "#1fbf75" if toggled else "#343a42"
-        outline = "#ffd447" if physical else "#687180"
-        width = 5 if physical else 2
+        fill = "#1fbf75" if physical else "#29313a"
+        outline = "#7df0b4" if physical else "#596575"
+        width = 3 if physical or toggled else 2
         shape = spec["shape"]
 
         if shape in ("circle", "stick_circle"):
@@ -762,10 +711,10 @@ class ControllerPanel:
             value_text = f"{self.state.axis_values[axis_x]: .2f}, {self.state.axis_values[axis_y]: .2f}"
             self.canvas.create_text(
                 self.x(spec["x"]),
-                self.y(spec["y"] + spec["r"] + 25),
+                self.y(spec["y"] + spec["r"] + 20),
                 text=value_text,
                 fill="#c5ccd6",
-                font=("DejaVu Sans Mono", 13),
+                font=("DejaVu Sans Mono", 10),
             )
 
     def draw_button_label(self, spec: Dict) -> None:
@@ -803,7 +752,7 @@ class ControllerPanel:
             self.y(spec["y"] - spec["r"] - 20),
             text=label,
             fill="#9aa4b2",
-            font=("DejaVu Sans", 14, "bold"),
+            font=("DejaVu Sans", 11, "bold"),
         )
 
     def circle(self, cx: float, cy: float, radius: float, **kwargs) -> None:
