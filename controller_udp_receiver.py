@@ -189,9 +189,13 @@ class ControllerUdpReceiver:
         if self.estop_latched:
             flags["estop"] = True
 
+        safe_output = warning or remote_timeout or self.estop_latched
+
         axes = dict(frame["axes"])
-        if warning or remote_timeout or self.estop_latched:
+        buttons = dict(frame["buttons"])
+        if safe_output:
             axes = {"lx": 0.0, "ly": 0.0, "rx": 0.0, "ry": 0.0}
+            buttons = {name: False for name in buttons}
 
         now_rate = self.stats.rx_rate(now)
         return {
@@ -209,7 +213,7 @@ class ControllerUdpReceiver:
             "failsafe_timeout_ms": self.timeout_ms,
             "flags": flags,
             "axes": axes,
-            "buttons": dict(frame["buttons"]),
+            "buttons": buttons,
             "frame": copy.deepcopy(frame),
             "stats": {
                 "valid_count": self.stats.valid_count,
