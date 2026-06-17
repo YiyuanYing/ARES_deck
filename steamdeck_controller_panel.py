@@ -420,9 +420,9 @@ class ControllerPanel:
         self.calibration_deadline = 0.0
         self.calibration_samples: Dict[int, List[int]] = {i: [] for i in AXIS_MAP}
         self.virtual_button_until: Dict[int, float] = {}
-        self.physical_button_flash_until: Dict[int, float] = {}
         self.last_touch_at = 0.0
         self.last_touch_target = ""
+        self.touch_sequence_target = ""
 
         self.root.bind("<Escape>", self.exit_program)
         self.root.bind("<F11>", self.toggle_fullscreen)
@@ -430,7 +430,10 @@ class ControllerPanel:
         self.root.bind("<R>", self.reset_toggles)
         self.root.bind("<c>", self.recalibrate_axes)
         self.root.bind("<C>", self.recalibrate_axes)
-        self.canvas.bind("<ButtonPress-1>", self.handle_canvas_touch)
+        self.canvas.bind("<ButtonPress-1>", self.handle_canvas_press)
+        self.canvas.bind("<ButtonRelease-1>", self.handle_canvas_release)
+        self.root.bind("<ButtonPress-1>", self.handle_canvas_press, add="+")
+        self.root.bind("<ButtonRelease-1>", self.handle_canvas_release, add="+")
         self.root.protocol("WM_DELETE_WINDOW", self.exit_program)
 
     def run(self) -> None:
@@ -456,7 +459,13 @@ class ControllerPanel:
         mode = "enabled" if self.fullscreen else "disabled"
         print(f"[ui] fullscreen {mode}")
 
-    def handle_canvas_touch(self, event: tk.Event) -> None:
+    def handle_canvas_press(self, event: tk.Event) -> None:
+        self.handle_canvas_touch(event, is_release=False)
+
+    def handle_canvas_release(self, event: tk.Event) -> None:
+        self.handle_canvas_touch(event, is_release=True)
+
+    def handle_canvas_touch(self, event: tk.Event, is_release: bool = False) -> None:
         sx, sy, _s = self.scale()
         base_x = event.x / sx
         base_y = event.y / sy
@@ -468,9 +477,11 @@ class ControllerPanel:
             x2 = x1 + spec["w"]
             y2 = y1 + spec["h"]
             if x1 <= base_x <= x2 and y1 <= base_y <= y2:
-                if self.touch_is_duplicate(f"virtual:{button_id}"):
+                target = f"virtual:{button_id}"
+                if self.should_ignore_touch(target, is_release):
                     return
                 self.toggle_virtual_button(button_id)
+                self.redraw_now()
                 return
 
         for action, spec in FOOTER_TOUCH_BUTTONS.items():
@@ -479,22 +490,35 @@ class ControllerPanel:
             x2 = x1 + spec["w"]
             y2 = y1 + spec["h"]
             if x1 <= base_x <= x2 and y1 <= base_y <= y2:
-                if self.touch_is_duplicate(f"footer:{action}"):
+                target = f"footer:{action}"
+                if self.should_ignore_touch(target, is_release):
                     return
                 if action == "clear_estop":
                     self.trigger_clear_estop()
+                    self.redraw_now()
                 elif action == "exit_fullscreen":
                     self.toggle_fullscreen()
+                    self.redraw_now()
                 elif action == "exit_app":
                     self.exit_program()
                 return
 
-    def touch_is_duplicate(self, target: str) -> bool:
+    def should_ignore_touch(self, target: str, is_release: bool) -> bool:
+        if is_release and self.touch_sequence_target == target:
+            self.touch_sequence_target = ""
+            return True
+
         now = time.monotonic()
-        is_duplicate = target == self.last_touch_target and now - self.last_touch_at < 0.18
+        is_duplicate = target == self.last_touch_target and now - self.last_touch_at < 0.12
         self.last_touch_target = target
         self.last_touch_at = now
+        if not is_release:
+            self.touch_sequence_target = target
         return is_duplicate
+
+    def redraw_now(self) -> None:
+        self.draw()
+        self.canvas.update_idletasks()
 
     def toggle_virtual_button(self, button_id: int) -> None:
         new_state = not self.state.virtual_button_toggle.get(button_id, False)
@@ -613,8 +637,6 @@ class ControllerPanel:
         was_pressed = self.state.button_physical.get(button_id, False)
         is_pressed = value != 0
         self.state.button_physical[button_id] = is_pressed
-        if is_pressed:
-            self.physical_button_flash_until[button_id] = time.monotonic() + 0.12
 
         # 初始化事件只同步当前物理状态，不视为一次真实按下。
         if is_init:
@@ -626,6 +648,7 @@ class ControllerPanel:
             self.state.button_toggle[button_id] = new_state
             button_name = DISPLAY_BUTTON_MAP.get(button_id, {}).get("name", BUTTON_NAMES.get(button_id, f"BUTTON_{button_id}"))
             on_button_toggled(button_id, button_name, new_state)
+            self.redraw_now()
 
     def handle_axis_event(self, axis_id: int, raw_value: int) -> None:
         if axis_id not in AXIS_MAP:
@@ -797,11 +820,9 @@ class ControllerPanel:
 
     def draw_button(self, button_id: int, spec: Dict) -> None:
         toggled = self.state.button_toggle.get(button_id, False)
-        physical = self.state.button_physical.get(button_id, False)
-        visible_pressed = physical or time.monotonic() <= self.physical_button_flash_until.get(button_id, 0.0)
-        fill = "#1fbf75" if visible_pressed else "#29313a"
-        outline = "#7df0b4" if visible_pressed else "#596575"
-        width = 3 if visible_pressed or toggled else 2
+        fill = "#1fbf75" if toggled else "#29313a"
+        outline = "#7df0b4" if toggled else "#596575"
+        width = 3 if toggled else 2
         shape = spec["shape"]
 
         if shape == "circle":
