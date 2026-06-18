@@ -705,8 +705,8 @@ class ControllerPanel:
         self.virtual_button_until: Dict[int, float] = {}
         self.active_touch_target = ""
 
-        self.root.bind("<Escape>", self.exit_program)
         self.root.bind("<F11>", self.toggle_fullscreen)
+        self.root.bind("<Control-q>", self.exit_program)
         self.root.bind("<r>", self.reset_toggles)
         self.root.bind("<R>", self.reset_toggles)
         self.root.bind("<c>", self.recalibrate_axes)
