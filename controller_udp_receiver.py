@@ -155,11 +155,12 @@ class ControllerUdpReceiver:
             self.timeout_ms = int(clamp(frame.get("failsafe_timeout_ms", DEFAULT_FAILSAFE_TIMEOUT_MS), MIN_FAILSAFE_TIMEOUT_MS, MAX_FAILSAFE_TIMEOUT_MS))
             reset_requested = bool(frame["buttons"].get("VIRTUAL_RESET", False))
             frame_estop = bool(frame["flags"].get("estop", False))
-            if reset_requested and not frame_estop:
+            if reset_requested:
                 self.estop_latched = False
-            if frame_estop:
+            elif frame_estop:
                 self.estop_latched = True
-            # TODO: 后续可把解除条件扩展为 VIRTUAL_RESET + ENABLE 的双条件确认。
+            # Reset has priority over an ESTOP bit in the same frame so a clear pulse
+            # can recover from stale local ESTOP toggles on the sender.
             self.latest_frame = frame
 
     def update_state(self) -> dict:
@@ -186,8 +187,7 @@ class ControllerUdpReceiver:
 
         frame = self.latest_frame
         flags = dict(frame["flags"])
-        if self.estop_latched:
-            flags["estop"] = True
+        flags["estop"] = bool(self.estop_latched)
 
         safe_output = warning or remote_timeout or self.estop_latched
 

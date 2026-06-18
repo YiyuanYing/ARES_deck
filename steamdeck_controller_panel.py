@@ -817,9 +817,14 @@ class ControllerPanel:
         print(f"[virtual] {button_id:02d} {button_name} toggled -> {new_state}")
 
     def trigger_clear_estop(self) -> None:
+        estop_button_id = BUTTON_IDS["VIRTUAL_ESTOP"]
         reset_button_id = BUTTON_IDS["VIRTUAL_RESET"]
-        self.virtual_button_until[reset_button_id] = time.monotonic() + RESET_PULSE_SECONDS
-        print("[safety] VIRTUAL_RESET pulse sent to clear ESTOP latch")
+        steam_button_id = BUTTON_IDS["STEAM"]
+        self.state.virtual_button_toggle[estop_button_id] = False
+        self.state.virtual_button_toggle[reset_button_id] = False
+        self.state.button_toggle[steam_button_id] = False
+        self.virtual_button_until[reset_button_id] = time.monotonic() + max(RESET_PULSE_SECONDS, 0.75)
+        print("[safety] local ESTOP sources cleared; VIRTUAL_RESET pulse sent to clear ESTOP latch")
 
     def reset_toggles(self, _event: tk.Event | None = None) -> None:
         for button_id in self.state.button_toggle:
