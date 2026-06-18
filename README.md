@@ -3,17 +3,36 @@
 本项目用于把 Steam Deck Ubuntu 当作机器人遥控器：
 
 - 通过 Linux joystick 接口 `/dev/input/js0` 读取 Steam Deck 实体按键和左右摇杆。
-- 在本地图形化面板中显示按键、toggle 状态和摇杆位置。
+- 在本地图形化面板中显示按键、toggle 状态、触屏虚拟按钮和摇杆位置。
 - 以 UDP 发送固定长度 48 bytes 的 `ControllerFrame V2` 二进制控制帧。
-- 机载小电脑或 Windows 笔记本接收后解析成 `axes/buttons/flags` 状态，后续可直接接入底盘控制、ROS2、串口或 H100 数传模块。
+- 机载小电脑或 Windows 笔记本接收后解析成 `axes/buttons/flags` 状态，后续可接入底盘控制、ROS2、串口或 H100 数传模块。
 
-## 文件说明
+## 目录结构
 
-- `steamdeck_controller_panel.py`: Steam Deck GUI 面板，读取 `/dev/input/js0`，接入 100 Hz UDP 发送。
-- `controller_protocol.py`: 协议层，只负责 ControllerFrame V2 打包、解析、CRC 校验、axes/buttons/flags 编码。
-- `controller_udp_sender.py`: UDP 发送层，使用 `time.perf_counter()` 固定 100 Hz 发送二进制帧。
-- `controller_udp_receiver.py`: UDP 接收端，收包线程解析数据，主循环 100 Hz 维护 `latest_state` 和 failsafe。
-- `udp_receiver.py`: 兼容入口，等价于运行 `controller_udp_receiver.py`。
+代码按 `app / ui / core` 三层整理：
+
+```text
+app/
+  controller_panel.py   # Steam Deck GUI 主入口
+  udp_receiver.py       # UDP 接收端 CLI 入口
+  udp_sender.py         # 独立 UDP 发送测试入口
+  config/
+    param.yaml          # app 入口使用的默认 IP、端口、频率和触屏参数
+
+ui/
+  config.py             # UI 尺寸、按钮布局、轴映射、默认 UI 参数
+  inputs.py             # JoystickReader、TouchReader、HostReachabilityMonitor
+  panel.py              # ControllerPanel、Tkinter 绘制和触屏交互
+
+core/
+  protocol.py           # ControllerFrame V2 打包、解析、CRC、axes/buttons/flags 编码
+  udp_sender.py         # 固定频率 UDP 发送
+  udp_receiver.py       # UDP 接收、latest_state、failsafe、ESTOP latch
+```
+
+根目录只保留文档、依赖说明和启动脚本。Python 代码都放在 `app/`、`ui/`、`core/` 中。
+
+- `start_controller.sh`: Steam Deck 上的启动脚本，当前会运行 `python -m app.controller_panel --debug-touch`
 
 ## 环境准备
 
@@ -24,13 +43,19 @@ conda activate controller
 python3 --version
 ```
 
-当前代码只使用 Python 标准库。Tkinter 通常属于系统包，如果 Ubuntu 缺少 Tkinter：
+Tkinter 通常属于系统包。如果 Ubuntu 缺少 Tkinter：
 
 ```bash
 sudo apt install python3-tk
 ```
 
-如果读不到 `/dev/input/js0` 或提示 permission denied：
+触屏 evdev 读取是可选能力。没有 `evdev` 时，程序会提示触屏 reader disabled，并保留 Tkinter mouse fallback。如果需要低延迟触屏读取：
+
+```bash
+pip install evdev
+```
+
+如果读不到 `/dev/input/js0`、触屏 event 设备，或提示 permission denied：
 
 ```bash
 sudo usermod -aG input $USER
@@ -41,7 +66,7 @@ Windows 或 Ubuntu 接收端：
 
 ```powershell
 conda activate controller
-python controller_udp_receiver.py --bind-ip 0.0.0.0 --port 5005
+python -m app.udp_receiver --bind-ip 0.0.0.0 --port 5005
 ```
 
 Windows 如果收不到 UDP，请在 Windows Defender 防火墙中允许 Python 入站，或添加 UDP 5005 入站规则。
@@ -52,32 +77,59 @@ Steam Deck 发送端：
 
 ```bash
 conda activate controller
-python3 steamdeck_controller_panel.py --local-ip 10.20.12.220 --target-ip 10.20.99.23 --port 5005
+python3 -m app.controller_panel --local-ip 10.20.12.220 --target-ip 10.20.99.23 --port 5005
+```
+
+也可以使用启动脚本：
+
+```bash
+./start_controller.sh
 ```
 
 接收端：
 
 ```powershell
 conda activate controller
-python controller_udp_receiver.py --bind-ip 0.0.0.0 --port 5005
+python -m app.udp_receiver --bind-ip 0.0.0.0 --port 5005
 ```
 
-也可以继续使用旧入口：
+app 默认参数写在 `app/config/param.yaml`：
 
-```powershell
-python udp_receiver.py --bind-ip 0.0.0.0 --port 5005
+```yaml
+controller_panel:
+  local_ip: "10.20.12.220"
+  remote_ip: "10.20.99.23"
+  port: 5005
+  send_hz: 100.0
+
+udp_receiver:
+  bind_ip: "0.0.0.0"
+  port: 5005
+
+udp_sender:
+  local_ip: "10.20.12.220"
+  target_ip: "10.20.99.23"
+  target_port: 5005
 ```
 
-默认目标地址在 `controller_udp_sender.py` 顶部：
+命令行参数仍然可用，并且会覆盖 `app/config/param.yaml` 中的默认值。
 
-```python
-LOCAL_IP = "10.20.12.220"
-TARGET_IP = "10.20.99.23"
-TARGET_PORT = 5005
-SEND_HZ = 100.0
+## 之后如何修改 UI
+
+只改界面显示时，优先看 `ui/`，不要动 `core/` 的协议和 UDP：
+
+- 改按钮位置、大小、标签、布局：修改 `ui/config.py` 里的 `VIRTUAL_BUTTON_MAP`、`FOOTER_TOUCH_BUTTONS`、`DISPLAY_BUTTON_MAP`。
+- 改颜色、字体、标题、状态栏显示：修改 `ui/panel.py` 里的 `draw_header()`、`draw_virtual_buttons()`、`draw_footer()`、`draw_button()`。
+- 改点击后的 UI 行为：修改 `ui/panel.py` 里的 `handle_canvas_touch_xy()`、`toggle_virtual_button()`、`trigger_clear_estop()`。
+- 改手柄或触屏读取：修改 `ui/inputs.py` 里的 `JoystickReader`、`TouchReader`。
+- 改“UI 状态如何发出去”：修改 `ControllerPanel.get_controller_snapshot()`。如果只是显示变化，不要改这里。
+
+建议修改后至少运行：
+
+```bash
+python -m app.controller_panel --help
+python -m core.protocol
 ```
-
-也可以通过命令行参数覆盖。
 
 ## ControllerFrame V2 协议
 
@@ -181,18 +233,20 @@ Steam Deck `/dev/input/js0` 当前实体按键映射：
 | 22 | L5 |
 | 23 | R5 |
 
-预留虚拟按键：
+GUI 当前有 8 个屏幕虚拟按钮，标签为 `Button1` 到 `Button8`，发送 ID 为 `32~39`。协议层当前保留这些 ID 的语义名：
 
-| ID | Name |
-|---:|---|
-| 32 | VIRTUAL_ESTOP |
-| 33 | VIRTUAL_ENABLE |
-| 34 | VIRTUAL_LOW_SPEED |
-| 35 | VIRTUAL_HIGH_SPEED |
-| 36 | VIRTUAL_AUTO_MODE |
-| 37 | VIRTUAL_RESET |
+| ID | Protocol Name | GUI Label |
+|---:|---|---|
+| 32 | VIRTUAL_ESTOP | Button1 |
+| 33 | VIRTUAL_ENABLE | Button2 |
+| 34 | VIRTUAL_LOW_SPEED | Button3 |
+| 35 | VIRTUAL_HIGH_SPEED | Button4 |
+| 36 | VIRTUAL_AUTO_MODE | Button5 |
+| 37 | VIRTUAL_RESET | Button6 |
+| 38 | VIRTUAL_AUX_1 | Button7 |
+| 39 | VIRTUAL_AUX_2 | Button8 |
 
-发送端默认发送 GUI 的绿色 toggle 状态：按一下锁存为 True，再按一下解除，类似航模遥控器拨杆。黄色描边只表示当前 physical pressed。后续屏幕触摸按钮可以映射到 `32~95` 的虚拟按键。
+发送端默认发送 GUI 的绿色 toggle 状态：按一下锁存为 True，再按一下解除。实体按键和屏幕虚拟按键都会合并到 `buttons` bitmask。
 
 ## Flags
 
@@ -218,6 +272,8 @@ Steam Deck `/dev/input/js0` 当前实体按键映射：
 
 如果 `STEAM`、`VIRTUAL_ESTOP` 或发送端传入 `estop=True`，则设置 `ESTOP`。
 
+如果 `VIRTUAL_AUTO_MODE` 被按下，则切换为 `AUTO_MODE`，并关闭 `MANUAL_MODE`。
+
 ## 心跳保护和 Failsafe
 
 发送端固定 100 Hz 发送，也就是每 10 ms 一帧。
@@ -230,31 +286,7 @@ Steam Deck `/dev/input/js0` 当前实体按键映射：
 - `failsafe_timeout_ms` 默认来自数据帧，默认值 150 ms。
 - 接收端会限制 timeout：`timeout_ms = clamp(failsafe_timeout_ms, 50, 300)`。
 - 收到 `ESTOP` flag 会立即进入急停。
-- 当前版本进入急停后不会自动恢复；Steam Deck 底部 `CLEAR ESTOP` 触屏按钮会发送短暂的 `VIRTUAL_RESET` 脉冲。接收端收到 `VIRTUAL_RESET` 且当前帧没有 ESTOP flag 时，会清除 ESTOP latch。
-
-接收端维护的 `latest_state` 结构类似：
-
-```python
-{
-    "online": True,
-    "remote_timeout": False,
-    "seq": 1234,
-    "age_ms": 12.3,
-    "jitter_ms": 2.1,
-    "lost": 0,
-    "ooo": 0,
-    "flags": {
-        "enable": True,
-        "estop": False,
-        "full_state": True,
-        "heartbeat": True,
-        "manual_mode": True,
-        "auto_mode": False,
-    },
-    "axes": {"lx": 0.0, "ly": 0.0, "rx": 0.0, "ry": 0.0},
-    "buttons": {"A": False, "B": False, "X": False, "Y": False, "LB": False, "RB": False, "STEAM": False},
-}
-```
+- 当前版本进入急停后不会自动恢复。Steam Deck 底部 `CLEAR ESTOP` 会清除本地 ESTOP 来源，并发送短暂 `VIRTUAL_RESET` 脉冲，接收端收到后清除 ESTOP latch。
 
 ## 日志解释
 
@@ -266,7 +298,6 @@ Steam Deck `/dev/input/js0` 当前实体按键映射：
 
 字段含义：
 
-- `[21:44:05]`: 本机显示时间。
 - `online`: 链路状态，也可能显示 `WARN`、`ESTOP`、`TIMEOUT`、`waiting`。
 - `from`: 最近一帧来源 IP 和 UDP 源端口。
 - `seq`: 最近有效帧序号。
@@ -277,7 +308,7 @@ Steam Deck `/dev/input/js0` 当前实体按键映射：
 - `age`: 距离最近有效帧的时间。
 - `axes`: 左右摇杆状态。
 - `buttons`: 当前按下的可读按钮名，`-` 表示没有按键按下。
-- `frame={...}`: 最近一帧 ControllerFrame V2 的完整字段内容，包括 header、flags、seq、timestamp、buttons bitmask、int16 axes、reserved 和 crc32。
+- `frame={...}`: 最近一帧 ControllerFrame V2 的完整字段内容。
 
 超时示例：
 
@@ -289,23 +320,16 @@ Steam Deck `/dev/input/js0` 当前实体按键映射：
 
 ```bash
 conda activate controller
-python controller_protocol.py
+python -m core.protocol
 ```
 
 自测会 build 一帧、parse 回来，并检查 axes、buttons、flags 和 CRC。
 
 ## 后续扩展
 
-加入屏幕虚拟按键：
-
-- 在 GUI 中添加触屏按钮。
-- 把触屏按钮状态写入 `VIRTUAL_ESTOP`、`VIRTUAL_ENABLE`、`VIRTUAL_LOW_SPEED` 等 ID。
-- 在 `get_controller_snapshot()` 中把这些状态合并到 `buttons` dict。
-- 当前 GUI 已内置 `CLEAR ESTOP`，它会把 `VIRTUAL_RESET` 置 True 约 250 ms。
-
 把 UDP 换成 H100 数传：
 
-- 保留 `controller_protocol.py` 不变。
+- 保留 `core/protocol.py` 不变。
 - 新建 H100 transport 模块，调用 `build_controller_frame()` 得到 48 bytes。
 - 接收端读取 H100 串口/链路数据后，按 48 bytes 帧边界调用 `parse_controller_frame()`。
 
@@ -315,3 +339,7 @@ python controller_protocol.py
 - 以 100 Hz 控制周期调用 `receiver.update_state()` 或读取 `receiver.get_latest_state()`。
 - 把 `latest_state["axes"]`、`latest_state["buttons"]`、`latest_state["flags"]` 映射到底盘速度、机构动作和安全状态。
 - 急停和 timeout 应优先级最高，进入 ESTOP 后不要自动恢复输出。
+
+sudo ip addr flush dev enx00e09a50a5cc
+sudo ip addr add 192.168.0.20/24 dev enx00e09a50a5cc
+sudo ip link set enx00e09a50a5cc up

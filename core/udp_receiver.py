@@ -15,7 +15,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Deque, Dict, Tuple
 
-from controller_protocol import (
+from core.protocol import (
     BUTTON_IDS,
     ControllerFrameError,
     clamp,
@@ -315,45 +315,3 @@ def build_status_line(state: dict) -> str:
         f"ooo={state['ooo']} jitter={state['jitter_ms']:4.1f}ms age={state['age_ms']:4.0f}ms "
         f"axes={axes_text} buttons={format_buttons(state['buttons'])}{bad_text} frame={frame_text}"
     )
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="ControllerFrame V2 UDP receiver with 100 Hz state loop.")
-    parser.add_argument("--bind-ip", default=BIND_IP)
-    parser.add_argument("--port", type=int, default=PORT)
-    parser.add_argument("--control-hz", type=float, default=CONTROL_HZ)
-    parser.add_argument("--print-interval", type=float, default=PRINT_INTERVAL_SECONDS)
-    return parser.parse_args()
-
-
-def main() -> None:
-    args = parse_args()
-    receiver = ControllerUdpReceiver(bind_ip=args.bind_ip, port=args.port)
-    receiver.start()
-
-    period = 1.0 / max(args.control_hz, 1.0)
-    next_tick = time.perf_counter()
-    next_print = next_tick
-    try:
-        while True:
-            now = time.perf_counter()
-            if now < next_tick:
-                time.sleep(min(next_tick - now, period))
-                continue
-
-            state = receiver.update_state()
-            if now >= next_print:
-                print(f"\r{build_status_line(state):<700}", end="", flush=True)
-                next_print = now + max(args.print_interval, 0.01)
-
-            next_tick += period
-            if next_tick < now - period:
-                next_tick = now + period
-    except KeyboardInterrupt:
-        print("\n[udp] stopped")
-    finally:
-        receiver.stop()
-
-
-if __name__ == "__main__":
-    main()

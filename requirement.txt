@@ -1,3 +1,7 @@
-# steamdeck_controller_panel.py 不需要 pip 第三方库。
 # Tkinter 属于 Python 标准库模块，但在 Ubuntu 上通常需要通过 apt 安装：
 # sudo apt install python3 python3-tk
+#
+# evdev 是可选依赖，用于低延迟读取 Linux 触屏 event 设备。
+# 不安装 evdev 时，GUI 仍会保留 Tkinter mouse fallback。
+# Steam Deck Ubuntu 端如需启用：
+# pip install evdev

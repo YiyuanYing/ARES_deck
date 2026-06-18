@@ -3,7 +3,7 @@
 """
 UDP transport for ControllerFrame V2 sender.
 
-The binary protocol itself lives in controller_protocol.py. This module only
+The binary protocol itself lives in core/protocol.py. This module only
 handles the UDP socket and the fixed-rate send loop.
 """
 
@@ -16,7 +16,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List
 
-from controller_protocol import BUTTON_NAMES, build_controller_frame
+from core.protocol import BUTTON_NAMES, build_controller_frame
 
 
 LOCAL_IP = "10.20.12.220"
@@ -238,37 +238,3 @@ class ControllerUdpSender:
             self.last_print_at = now
 
         self.seq = (self.seq + 1) & 0xFFFF
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Standalone ControllerFrame V2 UDP sender.")
-    parser.add_argument("--local-ip", default=LOCAL_IP)
-    parser.add_argument("--target-ip", default=TARGET_IP)
-    parser.add_argument("--target-port", type=int, default=TARGET_PORT)
-    parser.add_argument("--send-hz", type=float, default=SEND_HZ)
-    parser.add_argument("--failsafe-timeout-ms", type=int, default=FAILSAFE_TIMEOUT_MS)
-    return parser.parse_args()
-
-
-def main() -> None:
-    args = parse_args()
-    sender = ControllerUdpSender(
-        local_ip=args.local_ip,
-        target_ip=args.target_ip,
-        target_port=args.target_port,
-        send_hz=args.send_hz,
-        failsafe_timeout_ms=args.failsafe_timeout_ms,
-        print_status=True,
-    )
-    sender.start()
-    try:
-        while True:
-            time.sleep(1.0)
-    except KeyboardInterrupt:
-        print("\n[udp] stopped")
-    finally:
-        sender.stop()
-
-
-if __name__ == "__main__":
-    main()
