@@ -85,14 +85,14 @@ JS_EVENT_SIZE = 8
 
 # Virtual touchscreen buttons. Edit each button's "mode" field to change behavior.
 VIRTUAL_BUTTON_MAP = {
-    32: {"name": "Button1", "label": "BTN 1", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 164, "y": 178, "w": 226, "h": 202, "radius": 8},  # 虚拟急停键 BTN 1
-    33: {"name": "Button2", "label": "BTN 2", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 408, "y": 178, "w": 226, "h": 202, "radius": 8},  # 虚拟使能键 BTN 2
-    34: {"name": "Button3", "label": "BTN 3", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 646, "y": 178, "w": 226, "h": 202, "radius": 8},  # 虚拟低速键 BTN 3
-    35: {"name": "Button4", "label": "BTN 4", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 890, "y": 178, "w": 226, "h": 202, "radius": 8},  # 虚拟高速键 BTN 4
-    36: {"name": "Button5", "label": "BTN 5", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 164, "y": 404, "w": 226, "h": 202, "radius": 8},  # 虚拟自动模式键 BTN 5
-    37: {"name": "Button6", "label": "BTN 6", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 408, "y": 404, "w": 226, "h": 202, "radius": 8},  # 虚拟复位键 BTN 6
-    38: {"name": "Button7", "label": "BTN 7", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 646, "y": 404, "w": 226, "h": 202, "radius": 8},  # 虚拟辅助键 1 BTN 7
-    39: {"name": "Button8", "label": "BTN 8", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 890, "y": 404, "w": 226, "h": 202, "radius": 8},  # 虚拟辅助键 2 BTN 8
+    32: {"name": "Button1", "label": "BTN 1", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 176, "y": 190, "w": 204, "h": 172, "radius": 8},  # 虚拟急停键 BTN 1
+    33: {"name": "Button2", "label": "BTN 2", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 407, "y": 190, "w": 204, "h": 172, "radius": 8},  # 虚拟使能键 BTN 2
+    34: {"name": "Button3", "label": "BTN 3", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 638, "y": 190, "w": 204, "h": 172, "radius": 8},  # 虚拟低速键 BTN 3
+    35: {"name": "Button4", "label": "BTN 4", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 869, "y": 190, "w": 204, "h": 172, "radius": 8},  # 虚拟高速键 BTN 4
+    36: {"name": "Button5", "label": "BTN 5", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 176, "y": 386, "w": 204, "h": 172, "radius": 8},  # 虚拟自动模式键 BTN 5
+    37: {"name": "Button6", "label": "BTN 6", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 407, "y": 386, "w": 204, "h": 172, "radius": 8},  # 虚拟复位键 BTN 6
+    38: {"name": "Button7", "label": "BTN 7", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 638, "y": 386, "w": 204, "h": 172, "radius": 8},  # 虚拟辅助键 1 BTN 7
+    39: {"name": "Button8", "label": "BTN 8", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 869, "y": 386, "w": 204, "h": 172, "radius": 8},  # 虚拟辅助键 2 BTN 8
 }
 
 VIRTUAL_BUTTON_IDS = tuple(VIRTUAL_BUTTON_MAP)
@@ -100,23 +100,23 @@ VIRTUAL_BUTTON_IDS = tuple(VIRTUAL_BUTTON_MAP)
 FOOTER_TOUCH_BUTTONS = {
     "clear_estop": {
         "label": "CLEAR ESTOP",
-        "x": 164,
-        "y": 712,
-        "w": 230,
-        "h": 54,
+        "x": 176,
+        "y": 722,
+        "w": 204,
+        "h": 48,
     },
     "exit_fullscreen": {
-        "x": 525,
-        "y": 712,
-        "w": 230,
-        "h": 54,
+        "x": 538,
+        "y": 722,
+        "w": 204,
+        "h": 48,
     },
     "exit_app": {
         "label": "EXIT APP",
-        "x": 886,
-        "y": 712,
-        "w": 230,
-        "h": 54,
+        "x": 900,
+        "y": 722,
+        "w": 204,
+        "h": 48,
     },
 }
 
@@ -137,7 +137,7 @@ DISPLAY_BUTTON_MAP = {
         "shape": "rounded_rect",
         "x": 1208,
         "y": 625,
-        "w": 46,
+        "w": 40,
         "h": 48,
         "radius": 12,
     },
@@ -150,9 +150,9 @@ DISPLAY_BUTTON_MAP = {
         "label": "LB",
         "shape": "rounded_rect",
         "x": 28,
-        "y": 112,
+        "y": 206,
         "w": 91,
-        "h": 42,
+        "h": 40,
         "radius": 12,
     },
     8: {
@@ -160,9 +160,9 @@ DISPLAY_BUTTON_MAP = {
         "label": "RB",
         "shape": "rounded_rect",
         "x": 1161,
-        "y": 112,
+        "y": 206,
         "w": 91,
-        "h": 42,
+        "h": 40,
         "radius": 12,
     },
     9: {
@@ -170,9 +170,9 @@ DISPLAY_BUTTON_MAP = {
         "label": "LT",
         "shape": "rounded_rect",
         "x": 28,
-        "y": 62,
+        "y": 158,
         "w": 91,
-        "h": 42,
+        "h": 40,
         "radius": 12,
     },
     10: {
@@ -180,18 +180,18 @@ DISPLAY_BUTTON_MAP = {
         "label": "RT",
         "shape": "rounded_rect",
         "x": 1161,
-        "y": 62,
+        "y": 158,
         "w": 91,
-        "h": 42,
+        "h": 40,
         "radius": 12,
     },
     11: {
         "name": "View / Select",
         "label": "VIEW",
         "shape": "rounded_rect",
-        "x": 78,
+        "x": 80,
         "y": 625,
-        "w": 46,
+        "w": 40,
         "h": 48,
         "radius": 12,
     },
@@ -199,9 +199,9 @@ DISPLAY_BUTTON_MAP = {
         "name": "Menu / Start",
         "label": "MENU",
         "shape": "rounded_rect",
-        "x": 1161,
+        "x": 1160,
         "y": 625,
-        "w": 46,
+        "w": 40,
         "h": 48,
         "radius": 12,
     },
@@ -209,44 +209,44 @@ DISPLAY_BUTTON_MAP = {
         "name": "Steam",
         "label": "STEAM",
         "shape": "rounded_rect",
-        "x": 28,
+        "x": 32,
         "y": 625,
-        "w": 41,
+        "w": 40,
         "h": 48,
         "radius": 12,
     },
-    16: {"name": "D-pad Up", "label": "UP", "shape": "rounded_rect", "x": 58, "y": 420, "w": 28, "h": 34, "radius": 8},
-    17: {"name": "D-pad Down", "label": "DOWN", "shape": "rounded_rect", "x": 58, "y": 496, "w": 28, "h": 34, "radius": 8},
-    18: {"name": "D-pad Left", "label": "LEFT", "shape": "rounded_rect", "x": 18, "y": 458, "w": 28, "h": 34, "radius": 8},
-    19: {"name": "D-pad Right", "label": "RIGHT", "shape": "rounded_rect", "x": 98, "y": 458, "w": 28, "h": 34, "radius": 8},
+    16: {"name": "D-pad Up", "label": "↑", "shape": "circle", "x": 70, "y": 425, "r": 20},
+    17: {"name": "D-pad Down", "label": "↓", "shape": "circle", "x": 70, "y": 495, "r": 20},
+    18: {"name": "D-pad Left", "label": "←", "shape": "circle", "x": 35, "y": 460, "r": 20},
+    19: {"name": "D-pad Right", "label": "→", "shape": "circle", "x": 105, "y": 460, "r": 20},
     20: {
         "name": "L4",
         "label": "L4",
         "shape": "rounded_rect",
-        "x": 28,
-        "y": 208,
-        "w": 41,
-        "h": 110,
+        "x": 32,
+        "y": 284,
+        "w": 40,
+        "h": 96,
         "radius": 14,
     },
     21: {
         "name": "R4",
         "label": "R4",
         "shape": "rounded_rect",
-        "x": 1161,
-        "y": 208,
-        "w": 41,
-        "h": 110,
+        "x": 1160,
+        "y": 284,
+        "w": 40,
+        "h": 96,
         "radius": 14,
     },
     22: {
         "name": "L5",
         "label": "L5",
         "shape": "rounded_rect",
-        "x": 78,
-        "y": 208,
-        "w": 41,
-        "h": 110,
+        "x": 80,
+        "y": 284,
+        "w": 40,
+        "h": 96,
         "radius": 14,
     },
     23: {
@@ -254,9 +254,9 @@ DISPLAY_BUTTON_MAP = {
         "label": "R5",
         "shape": "rounded_rect",
         "x": 1208,
-        "y": 208,
-        "w": 41,
-        "h": 110,
+        "y": 284,
+        "w": 40,
+        "h": 96,
         "radius": 14,
     },
 }

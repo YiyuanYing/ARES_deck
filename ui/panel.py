@@ -59,6 +59,27 @@ DANGER_BG = THEME["danger_bg"]
 BUTTON_IDLE = THEME["button_idle"]
 BUTTON_PRESSED = THEME["button_pressed"]
 BUTTON_IDLE_OUTLINE = THEME["button_idle_outline"]
+TITLE_RAINBOW = (
+    "#ff5d73",
+    "#ff9f5d",
+    "#e7d95e",
+    "#72e58c",
+    "#78d7ff",
+    "#8fb4ff",
+    "#d18cff",
+)
+TITLE_PIXEL_SHADOW = "#2a0d18"
+TITLE_PIXEL_FONT = {
+    "A": ("01110", "10001", "10001", "11111", "10001", "10001", "10001"),
+    "C": ("01111", "10000", "10000", "10000", "10000", "10000", "01111"),
+    "E": ("11111", "10000", "10000", "11110", "10000", "10000", "11111"),
+    "H": ("10001", "10001", "10001", "11111", "10001", "10001", "10001"),
+    "R": ("11110", "10001", "10001", "11110", "10100", "10010", "10001"),
+    "S": ("01111", "10000", "10000", "01110", "00001", "00001", "11110"),
+    "T": ("11111", "00100", "00100", "00100", "00100", "00100", "00100"),
+    "U": ("10001", "10001", "10001", "10001", "10001", "10001", "01110"),
+    "-": ("00000", "00000", "00000", "11111", "00000", "00000", "00000"),
+}
 
 
 def blend_color(color_a: str, color_b: str, ratio: float) -> str:
@@ -575,14 +596,7 @@ class ControllerPanel:
             host_text = f"HOST disconnected -> {metrics.target_ip}:{metrics.target_port}"
         device_text = self.state.status_text.splitlines()[0]
         self.rounded_rect(28, 24, 1252, 126, 8, fill=SURFACE, outline=LINE, width=2)
-        self.canvas.create_text(
-            self.x(54),
-            self.y(48),
-            text="SUSTECH-ARES",
-            fill=TEXT,
-            font=("DejaVu Sans", 25, "bold"),
-            anchor="w",
-        )
+        self.draw_rainbow_title(54, 48, "SUSTECH-ARES")
         self.canvas.create_text(
             self.x(54),
             self.y(86),
@@ -616,6 +630,48 @@ class ControllerPanel:
             font=("DejaVu Sans Mono", 11),
         )
 
+    def draw_rainbow_title(self, x: float, y: float, text: str) -> None:
+        # Pixel-arcade title: the glyphs are made of blocks, and color flows
+        # through those blocks instead of trailing outside the text.
+        pixel = 4
+        gap = 1
+        char_gap = 3
+        char_width = 5 * pixel + 4 * gap + char_gap
+        top = y - 18
+        phase = time.monotonic() * 6.0
+
+        for char_index, char in enumerate(text):
+            glyph = TITLE_PIXEL_FONT.get(char.upper())
+            if glyph is None:
+                continue
+            char_x = x + char_index * char_width
+            for row_index, row in enumerate(glyph):
+                for col_index, cell in enumerate(row):
+                    if cell != "1":
+                        continue
+                    px = char_x + col_index * (pixel + gap)
+                    py = top + row_index * (pixel + gap)
+                    color_index = int((char_index * 1.4 + col_index * 0.8 + row_index * 0.35 + phase) % len(TITLE_RAINBOW))
+                    base = TITLE_RAINBOW[color_index]
+                    shimmer = 0.5 + 0.5 * math.sin(phase + char_index * 0.8 + col_index * 0.9)
+                    color = blend_color(base, ACTIVE_TEXT, shimmer * 0.22)
+                    self.canvas.create_rectangle(
+                        self.x(px + 2),
+                        self.y(py + 2),
+                        self.x(px + pixel + 2),
+                        self.y(py + pixel + 2),
+                        fill=TITLE_PIXEL_SHADOW,
+                        outline="",
+                    )
+                    self.canvas.create_rectangle(
+                        self.x(px),
+                        self.y(py),
+                        self.x(px + pixel),
+                        self.y(py + pixel),
+                        fill=color,
+                        outline="",
+                    )
+
     def draw_status_pill(self, x: float, y: float, width: float, title: str, value: str, color: str) -> None:
         self.rounded_rect(x, y, x + width, y + 54, 8, fill=PANEL_DARK, outline=LINE, width=2)
         self.circle(x + 20, y + 27, 5, fill=color, outline=color, width=1)
@@ -639,10 +695,10 @@ class ControllerPanel:
     def draw_edge_guides(self) -> None:
         self.rounded_rect(28, 150, 132, 686, 8, fill=SURFACE, outline=LINE, width=2)
         self.rounded_rect(1148, 150, 1252, 686, 8, fill=SURFACE, outline=LINE, width=2)
-        self.rounded_rect(150, 150, 1130, 626, 8, fill=PANEL_FIELD, outline=LINE, width=2)
+        self.rounded_rect(158, 162, 1122, 590, 8, fill=PANEL_FIELD, outline=LINE, width=2)
         self.canvas.create_text(
-            self.x(164),
-            self.y(160),
+            self.x(176),
+            self.y(174),
             text="TOUCH ACTIONS",
             fill=MUTED,
             font=("DejaVu Sans", 11, "bold"),
@@ -651,29 +707,29 @@ class ControllerPanel:
 
     def draw_axis_widgets(self) -> None:
         axes = self.state.axis_values
-        self.draw_stick_widget(234, 654, "LEFT", axes.get(0, 0.0), axes.get(1, 0.0))
-        self.draw_stick_widget(1046, 654, "RIGHT", axes.get(2, 0.0), axes.get(3, 0.0))
+        self.draw_stick_widget(278, 654, "LEFT", axes.get(0, 0.0), axes.get(1, 0.0))
+        self.draw_stick_widget(1002, 654, "RIGHT", axes.get(2, 0.0), axes.get(3, 0.0))
 
     def draw_stick_widget(self, cx: float, cy: float, label: str, ax: float, ay: float) -> None:
-        self.rounded_rect(cx - 88, cy - 44, cx + 88, cy + 44, 8, fill=SURFACE, outline=LINE, width=2)
-        self.circle(cx - 46, cy, 24, fill=STICK_BG, outline=LINE, width=2)
-        self.canvas.create_line(self.x(cx - 70), self.y(cy), self.x(cx - 22), self.y(cy), fill=LINE, width=1)
-        self.canvas.create_line(self.x(cx - 46), self.y(cy - 24), self.x(cx - 46), self.y(cy + 24), fill=LINE, width=1)
-        self.circle(cx - 46 + ax * 18.0, cy + ay * 18.0, 6, fill=BLUE, outline=BLUE, width=1)
+        self.rounded_rect(cx - 76, cy - 36, cx + 76, cy + 36, 8, fill=SURFACE, outline=LINE, width=2)
+        self.circle(cx - 40, cy, 20, fill=STICK_BG, outline=LINE, width=2)
+        self.canvas.create_line(self.x(cx - 60), self.y(cy), self.x(cx - 20), self.y(cy), fill=LINE, width=1)
+        self.canvas.create_line(self.x(cx - 40), self.y(cy - 20), self.x(cx - 40), self.y(cy + 20), fill=LINE, width=1)
+        self.circle(cx - 40 + ax * 15.0, cy + ay * 15.0, 5, fill=BLUE, outline=BLUE, width=1)
         self.canvas.create_text(
-            self.x(cx - 4),
-            self.y(cy - 12),
+            self.x(cx - 2),
+            self.y(cy - 10),
             text=label,
             fill=TEXT,
             font=("DejaVu Sans", 12, "bold"),
             anchor="w",
         )
         self.canvas.create_text(
-            self.x(cx - 4),
-            self.y(cy + 13),
+            self.x(cx - 2),
+            self.y(cy + 12),
             text=f"x={ax:+.2f}  y={ay:+.2f}",
             fill=MUTED,
-            font=("DejaVu Sans Mono", 10),
+            font=("DejaVu Sans Mono", 9),
             anchor="w",
         )
 
@@ -727,7 +783,7 @@ class ControllerPanel:
                 self.y(spec["y"] + spec["h"] / 2),
                 text=spec["label"],
                 fill=blend_color(TEXT, ACTIVE_TEXT, light),
-                font=("DejaVu Sans", 24, "bold"),
+                font=("DejaVu Sans", 21, "bold"),
                 justify="center",
             )
 
@@ -757,7 +813,7 @@ class ControllerPanel:
                 self.y(spec["y"] + spec["h"] / 2),
                 text=self.footer_button_label(action, spec),
                 fill=TEXT,
-                font=("DejaVu Sans", 14, "bold"),
+                font=("DejaVu Sans", 13, "bold"),
             )
 
     def footer_button_label(self, action: str, spec: Dict) -> str:
