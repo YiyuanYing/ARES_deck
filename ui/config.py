@@ -269,7 +269,7 @@ DISPLAY_BUTTON_MAP = {
 # Entries here are merged into outgoing UDP button states by ControllerPanel.
 PHYSICAL_BUTTON_MODE_MAP = {
     2: DEFAULT_BUTTON_ACTIVATION_MODE,  # 快捷菜单键 / ...
-    3: DEFAULT_BUTTON_ACTIVATION_MODE,  # A 键
+    3: "momentary",  # A 键：按住有效；地图编辑器打开时再次按下会临时退出
     4: DEFAULT_BUTTON_ACTIVATION_MODE,  # B 键
     5: DEFAULT_BUTTON_ACTIVATION_MODE,  # X 键
     6: DEFAULT_BUTTON_ACTIVATION_MODE,  # Y 键

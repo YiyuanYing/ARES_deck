@@ -352,6 +352,12 @@ class ControllerPanel:
             return
         if int(button_id) != int(MAP_EDITOR_TRIGGER_BUTTON_ID):
             return
+        if self.map_editor_dialog is not None:
+            try:
+                self.map_editor_dialog.cancel()
+                return
+            except tk.TclError:
+                self.map_editor_dialog = None
         self.open_map_editor()
 
     def open_map_editor(self) -> None:
