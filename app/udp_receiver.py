@@ -39,13 +39,13 @@ def parse_args() -> argparse.Namespace:
         "--map-port",
         type=int,
         default=params.get("map_port", params.get("port", PORT) + 1 if params.get("port") is not None else MAP_MESSAGE_PORT),
-        help="Low-rate target-map UDP port.",
+        help="Low-rate target-map/action-command UDP JSON port.",
     )
     parser.add_argument(
         "--no-map-receiver",
         action="store_true",
         default=not params.get("map_receiver_enabled", True),
-        help="Disable target-map UDP JSON receiver.",
+        help="Disable low-rate target-map/action-command UDP JSON receiver.",
     )
     parser.add_argument("--control-hz", type=float, default=params.get("control_hz", CONTROL_HZ))
     parser.add_argument("--print-interval", type=float, default=default_print_interval)

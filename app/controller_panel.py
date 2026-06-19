@@ -65,7 +65,7 @@ def parse_args() -> argparse.Namespace:
         "--map-port",
         type=int,
         default=params.get("map_port", DEFAULT_MAP_MESSAGE_PORT),
-        help="Low-rate target-map UDP receiver port.",
+        help="Low-rate target-map/action-command UDP JSON receiver port.",
     )
     parser.add_argument("--send-hz", type=float, default=params.get("send_hz", SEND_HZ), help="Controller packets per second.")
     parser.add_argument("--failsafe-timeout-ms", type=int, default=params.get("failsafe_timeout_ms", FAILSAFE_TIMEOUT_MS), help="Failsafe timeout encoded in each frame.")

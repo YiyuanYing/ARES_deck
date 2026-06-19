@@ -23,6 +23,7 @@ ui/
   config.py             # UI 尺寸、按钮布局、轴映射、默认 UI 参数
   inputs.py             # JoystickReader、TouchReader、HostReachabilityMonitor
   map_editor/           # 3x4 目标地图编辑弹窗、模式上限配置、地图数据转换
+  action_command/       # B 键动作指令弹窗、2x3 指令和 PLACE 发送
   panel.py              # ControllerPanel、Tkinter 绘制和触屏交互
 
 core/
@@ -150,9 +151,11 @@ FRAME_FMT = "<HBBHHHHIQQ4h4sI"
 
 CRC32 计算范围：前 44 bytes，即不包含最后 4 bytes `crc32` 字段。
 
-## 目标地图 UDP JSON
+## 低频 UDP JSON
 
-目标地图使用独立低频 UDP JSON 通道，不占用 `ControllerFrame V2`。默认端口是控制端口 `+1`，例如控制帧 `5005`，地图消息 `5006`。
+目标地图和离散动作指令使用独立低频 UDP JSON 通道，不占用 `ControllerFrame V2`。默认端口是控制端口 `+1`，例如控制帧 `5005`，低频 JSON 消息 `5006`。
+
+### 目标地图
 
 UI 弹窗只编辑中间 `4x3` 区域，发送时自动补成 `6x3`：
 
@@ -180,7 +183,33 @@ payload 示例：
 }
 ```
 
-R1 receiver 收到后会校验尺寸和颜色编码，缓存 `latest_target_map`，并打印 `[map]` 结构化日志。ROS2 Action、`team/method` 和 apriltag 通信格式暂时保留为 TODO。
+R1 receiver 收到后会校验尺寸和颜色编码，缓存 `latest_target_map`，并打印 `[map]` 结构化日志。
+
+### 动作指令
+
+B 键动作窗口发送离散动作，不发送整张地图。`2x3` 指令格 payload 示例：
+
+```json
+{
+  "type": "action_command",
+  "action": "select",
+  "row": 3,
+  "col": "left",
+  "timestamp": 1718400000.0
+}
+```
+
+`PLACE` 按钮 payload 示例：
+
+```json
+{
+  "type": "action_command",
+  "action": "place",
+  "timestamp": 1718400000.0
+}
+```
+
+R1 receiver 会校验 `row=2|3`、`col=left|mid|right`，缓存 `latest_action_command`，并打印 `[action]` 结构化日志。ROS2 Action、`team/method` 和 apriltag 通信格式暂时保留为 TODO。
 
 | Offset | Size | Type | Name | Description |
 |---:|---:|---|---|---|

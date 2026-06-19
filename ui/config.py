@@ -22,6 +22,7 @@ DEFAULT_MAP_MESSAGE_PORT = MAP_MESSAGE_PORT
 UDP_SEND_HZ = SEND_HZ
 RESET_PULSE_SECONDS = 0.25
 MAP_EDITOR_TRIGGER_BUTTON_ID = 3  # A 键：按下会打开目标地图编辑器。
+ACTION_COMMAND_TRIGGER_BUTTON_ID = 4  # B 键：按下会打开动作指令窗口。
 
 UI_COLOR_THEME = "burgundy"  # 可选: "burgundy" 酒红色, "midnight_blue" 墨蓝色
 UI_COLOR_THEMES = {
@@ -270,7 +271,7 @@ DISPLAY_BUTTON_MAP = {
 PHYSICAL_BUTTON_MODE_MAP = {
     2: DEFAULT_BUTTON_ACTIVATION_MODE,  # 快捷菜单键 / ...
     3: "momentary",  # A 键：按住有效；地图编辑器打开时再次按下会临时退出
-    4: DEFAULT_BUTTON_ACTIVATION_MODE,  # B 键
+    4: "momentary",  # B 键：按住有效；动作指令窗口打开时再次按下会临时退出
     5: DEFAULT_BUTTON_ACTIVATION_MODE,  # X 键
     6: DEFAULT_BUTTON_ACTIVATION_MODE,  # Y 键
     7: DEFAULT_BUTTON_ACTIVATION_MODE,  # 左肩键 LB

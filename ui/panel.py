@@ -14,6 +14,7 @@ from typing import Dict, List, Tuple
 from core.protocol import BUTTON_IDS, BUTTON_NAMES
 from core.udp_sender import ControllerUdpSender
 from ui.config import (
+    ACTION_COMMAND_TRIGGER_BUTTON_ID,
     AXIS_MAP,
     BASE_HEIGHT,
     BASE_WIDTH,
@@ -35,6 +36,7 @@ from ui.config import (
     VIRTUAL_BUTTON_IDS,
     VIRTUAL_BUTTON_MAP,
 )
+from ui.action_command import ActionCommandDialog
 from ui.inputs import HostReachabilityMonitor, JoystickReader, TouchReader
 from ui.map_editor import TargetMapEditorDialog
 
@@ -177,6 +179,7 @@ class ControllerPanel:
         self.remote_ip = remote_ip
         self.map_message_port = int(map_message_port)
         self.map_editor_dialog: TargetMapEditorDialog | None = None
+        self.action_command_dialog: ActionCommandDialog | None = None
         self.udp_sender = ControllerUdpSender(
             state_provider=self.get_controller_snapshot,
             local_ip=local_ip,
@@ -253,6 +256,15 @@ class ControllerPanel:
         self.release_active_touch_target()
 
     def handle_canvas_touch_xy(self, screen_x: float, screen_y: float, source: str = "touch") -> None:
+        if self.action_command_dialog is not None:
+            try:
+                if self.action_command_dialog.handle_screen_touch(screen_x, screen_y):
+                    if self.debug_touch:
+                        print(f"[touch] {source} hit action command at ({screen_x:.1f},{screen_y:.1f})")
+                    return
+            except tk.TclError:
+                self.action_command_dialog = None
+
         if self.map_editor_dialog is not None:
             try:
                 if self.map_editor_dialog.handle_screen_touch(screen_x, screen_y):
@@ -276,6 +288,7 @@ class ControllerPanel:
                 if self.touch_already_handled(target):
                     return
                 self.open_map_editor_for_button(button_id)
+                self.open_action_command_for_button(button_id)
                 self.press_virtual_button(button_id)
                 if self.debug_touch:
                     print(f"[touch] {source} hit {target} at ({screen_x:.1f},{screen_y:.1f})")
@@ -361,6 +374,7 @@ class ControllerPanel:
         self.open_map_editor(button_id)
 
     def open_map_editor(self, origin_button_id: int | None = None) -> None:
+        self.close_action_command()
         if self.map_editor_dialog is not None:
             try:
                 self.map_editor_dialog.window.lift()
@@ -381,6 +395,58 @@ class ControllerPanel:
 
     def clear_map_editor_reference(self) -> None:
         self.map_editor_dialog = None
+
+    def close_map_editor(self) -> None:
+        if self.map_editor_dialog is None:
+            return
+        try:
+            self.map_editor_dialog.cancel()
+        except tk.TclError:
+            self.map_editor_dialog = None
+
+    def open_action_command_for_button(self, button_id: int) -> None:
+        if ACTION_COMMAND_TRIGGER_BUTTON_ID is None:
+            return
+        if int(button_id) != int(ACTION_COMMAND_TRIGGER_BUTTON_ID):
+            return
+        if self.action_command_dialog is not None:
+            try:
+                self.action_command_dialog.cancel()
+                return
+            except tk.TclError:
+                self.action_command_dialog = None
+        self.open_action_command(button_id)
+
+    def open_action_command(self, origin_button_id: int | None = None) -> None:
+        self.close_map_editor()
+        if self.action_command_dialog is not None:
+            try:
+                self.action_command_dialog.window.lift()
+                return
+            except tk.TclError:
+                self.action_command_dialog = None
+        origin = self.button_screen_origin(origin_button_id)
+        self.action_command_dialog = ActionCommandDialog(
+            self.root,
+            theme=THEME,
+            local_ip=self.local_ip,
+            target_ip=self.remote_ip,
+            target_port=self.map_message_port,
+            origin=origin,
+            status_provider=self.map_editor_status_text,
+            on_close=self.clear_action_command_reference,
+        )
+
+    def clear_action_command_reference(self) -> None:
+        self.action_command_dialog = None
+
+    def close_action_command(self) -> None:
+        if self.action_command_dialog is None:
+            return
+        try:
+            self.action_command_dialog.cancel()
+        except tk.TclError:
+            self.action_command_dialog = None
 
     def button_screen_origin(self, button_id: int | None) -> tuple[int, int] | None:
         if button_id is None:
@@ -566,6 +632,7 @@ class ControllerPanel:
         button_name = DISPLAY_BUTTON_MAP.get(button_id, {}).get("name", BUTTON_NAMES.get(button_id, f"BUTTON_{button_id}"))
         if is_pressed and not was_pressed:
             self.open_map_editor_for_button(button_id)
+            self.open_action_command_for_button(button_id)
         if mode == "momentary":
             if self.state.button_toggle.get(button_id, False) != is_pressed:
                 self.state.button_toggle[button_id] = is_pressed

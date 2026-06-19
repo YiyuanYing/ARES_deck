@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Low-rate target-map UDP messages.
+Low-rate UDP JSON messages.
 
 This channel is intentionally separate from ControllerFrame V2 so map editing
-cannot disturb the real-time controller stream.
+and discrete action commands cannot disturb the real-time controller stream.
 """
 
 from __future__ import annotations
@@ -21,9 +21,13 @@ from core.udp_sender import LOCAL_IP, TARGET_IP, TARGET_PORT
 
 MAP_MESSAGE_PORT = TARGET_PORT + 1
 MAP_MESSAGE_TYPE = "target_map"
+ACTION_COMMAND_MESSAGE_TYPE = "action_command"
 MAP_WIDTH = 3
 MAP_HEIGHT = 6
 MAP_ALLOWED_VALUES = {0, 1, 2, 3}
+ACTION_COMMAND_ACTIONS = {"select", "place"}
+ACTION_COMMAND_ROWS = {2, 3}
+ACTION_COMMAND_COLS = {"left", "mid", "right"}
 
 
 @dataclass
@@ -67,13 +71,59 @@ def validate_target_map_payload(payload: Dict[str, Any]) -> None:
                 raise ValueError(f"invalid cell value: {value!r}")
 
 
-def send_target_map_payload(
+def build_action_command_payload(
+    action: str,
+    row: int | None = None,
+    col: str | None = None,
+    timestamp: float | None = None,
+) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {
+        "type": ACTION_COMMAND_MESSAGE_TYPE,
+        "action": str(action),
+        "timestamp": time.time() if timestamp is None else float(timestamp),
+    }
+    if action == "select":
+        payload["row"] = int(row) if row is not None else row
+        payload["col"] = str(col).lower() if col is not None else col
+    validate_action_command_payload(payload)
+    return payload
+
+
+def validate_action_command_payload(payload: Dict[str, Any]) -> None:
+    if payload.get("type") != ACTION_COMMAND_MESSAGE_TYPE:
+        raise ValueError(f"invalid action command message type: {payload.get('type')!r}")
+
+    action = payload.get("action")
+    if action not in ACTION_COMMAND_ACTIONS:
+        raise ValueError(f"invalid action command: {action!r}")
+
+    if action == "select":
+        row = int(payload.get("row", 0))
+        col = payload.get("col")
+        if row not in ACTION_COMMAND_ROWS:
+            raise ValueError(f"invalid action row: {payload.get('row')!r}")
+        if col not in ACTION_COMMAND_COLS:
+            raise ValueError(f"invalid action col: {col!r}")
+
+
+def validate_low_rate_payload(payload: Dict[str, Any]) -> None:
+    message_type = payload.get("type")
+    if message_type == MAP_MESSAGE_TYPE:
+        validate_target_map_payload(payload)
+        return
+    if message_type == ACTION_COMMAND_MESSAGE_TYPE:
+        validate_action_command_payload(payload)
+        return
+    raise ValueError(f"invalid low-rate message type: {message_type!r}")
+
+
+def send_low_rate_payload(
     payload: Dict[str, Any],
     local_ip: str = LOCAL_IP,
     target_ip: str = TARGET_IP,
     target_port: int = MAP_MESSAGE_PORT,
 ) -> int:
-    validate_target_map_payload(payload)
+    validate_low_rate_payload(payload)
     data = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
@@ -83,11 +133,38 @@ def send_target_map_payload(
         sock.close()
 
 
+def send_target_map_payload(
+    payload: Dict[str, Any],
+    local_ip: str = LOCAL_IP,
+    target_ip: str = TARGET_IP,
+    target_port: int = MAP_MESSAGE_PORT,
+) -> int:
+    validate_target_map_payload(payload)
+    return send_low_rate_payload(payload, local_ip, target_ip, target_port)
+
+
+def send_action_command_payload(
+    payload: Dict[str, Any],
+    local_ip: str = LOCAL_IP,
+    target_ip: str = TARGET_IP,
+    target_port: int = MAP_MESSAGE_PORT,
+) -> int:
+    validate_action_command_payload(payload)
+    return send_low_rate_payload(payload, local_ip, target_ip, target_port)
+
+
 def format_target_map(payload: Dict[str, Any]) -> str:
     mode = payload.get("mode", "-")
     grid = payload.get("grid", [])
     rows = ["".join(str(cell) for cell in row) for row in grid]
     return f"mode={mode} grid={'/'.join(rows)}"
+
+
+def format_action_command(payload: Dict[str, Any]) -> str:
+    action = payload.get("action", "-")
+    if action == "select":
+        return f"action=select row={payload.get('row')} col={payload.get('col')}"
+    return f"action={action}"
 
 
 class TargetMapUdpReceiver:
@@ -100,6 +177,7 @@ class TargetMapUdpReceiver:
         self.lock = threading.Lock()
         self.stats = MapReceiverStats()
         self.latest_target_map: Dict[str, Any] | None = None
+        self.latest_action_command: Dict[str, Any] | None = None
 
     def start(self) -> None:
         if self.thread and self.thread.is_alive():
@@ -110,7 +188,7 @@ class TargetMapUdpReceiver:
         self.stop_event.clear()
         self.thread = threading.Thread(target=self._receive_loop, name="TargetMapUdpReceiver", daemon=True)
         self.thread.start()
-        print(f"[map] listening for target-map JSON on {self.bind_ip}:{self.port}")
+        print(f"[json] listening for target-map/action-command JSON on {self.bind_ip}:{self.port}")
 
     def stop(self) -> None:
         self.stop_event.set()
@@ -124,6 +202,10 @@ class TargetMapUdpReceiver:
         with self.lock:
             return copy.deepcopy(self.latest_target_map)
 
+    def get_latest_action_command(self) -> Dict[str, Any] | None:
+        with self.lock:
+            return copy.deepcopy(self.latest_action_command)
+
     def _receive_loop(self) -> None:
         while not self.stop_event.is_set():
             try:
@@ -136,30 +218,41 @@ class TargetMapUdpReceiver:
 
             try:
                 payload = json.loads(data.decode("utf-8"))
-                validate_target_map_payload(payload)
+                validate_low_rate_payload(payload)
             except Exception as exc:
                 self._note_bad_packet(str(exc))
                 continue
 
-            self._note_valid_map(payload, addr)
+            self._note_valid_payload(payload, addr)
 
     def _note_bad_packet(self, reason: str) -> None:
         with self.lock:
             self.stats.bad_count += 1
             self.stats.last_error = reason
-        print(f"[map] bad target-map packet: {reason}")
+        print(f"[json] bad low-rate packet: {reason}")
 
-    def _note_valid_map(self, payload: Dict[str, Any], addr: Tuple[str, int]) -> None:
+    def _note_valid_payload(self, payload: Dict[str, Any], addr: Tuple[str, int]) -> None:
         now = time.time()
         with self.lock:
-            self.latest_target_map = copy.deepcopy(payload)
+            if payload.get("type") == MAP_MESSAGE_TYPE:
+                self.latest_target_map = copy.deepcopy(payload)
+            elif payload.get("type") == ACTION_COMMAND_MESSAGE_TYPE:
+                self.latest_action_command = copy.deepcopy(payload)
             self.stats.valid_count += 1
             self.stats.last_addr = addr
             self.stats.last_received_at = now
             self.stats.last_error = ""
-        print(f"[map] received from {addr[0]}:{addr[1]} {format_target_map(payload)}")
-        self.handle_target_map(payload)
+        if payload.get("type") == MAP_MESSAGE_TYPE:
+            print(f"[map] received from {addr[0]}:{addr[1]} {format_target_map(payload)}")
+            self.handle_target_map(payload)
+        elif payload.get("type") == ACTION_COMMAND_MESSAGE_TYPE:
+            print(f"[action] received from {addr[0]}:{addr[1]} {format_action_command(payload)}")
+            self.handle_action_command(payload)
 
     def handle_target_map(self, payload: Dict[str, Any]) -> None:
+        # TODO: 接入 R1 -> 后续节点的 ROS2 Action / apriltag 通信代码。
+        _ = payload
+
+    def handle_action_command(self, payload: Dict[str, Any]) -> None:
         # TODO: 接入 R1 -> 后续节点的 ROS2 Action / apriltag 通信代码。
         _ = payload
