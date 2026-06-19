@@ -375,6 +375,7 @@ class ControllerPanel:
             target_ip=self.remote_ip,
             target_port=self.map_message_port,
             origin=origin,
+            status_provider=self.map_editor_status_text,
             on_close=self.clear_map_editor_reference,
         )
 
@@ -398,6 +399,18 @@ class ControllerPanel:
             self.root.winfo_rootx() + int(base_x * sx),
             self.root.winfo_rooty() + int(base_y * sy),
         )
+
+    def map_editor_status_text(self) -> str:
+        metrics = self.udp_sender.snapshot_metrics()
+        host_reachable, host_checked_at = self.host_monitor.snapshot()
+        host_fresh = host_checked_at > 0.0 and time.monotonic() - host_checked_at <= 2.5
+        if host_reachable and host_fresh:
+            state = "connected"
+        elif not host_fresh:
+            state = "checking"
+        else:
+            state = "disconnected"
+        return f"HOST {state} -> {metrics.target_ip}:{metrics.target_port}"
 
     def set_virtual_button(self, button_id: int, state: bool, reason: str) -> None:
         if self.state.virtual_button_toggle.get(button_id, False) == state:

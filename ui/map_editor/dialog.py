@@ -57,6 +57,7 @@ class TargetMapEditorDialog:
         target_ip: str,
         target_port: int,
         origin: tuple[int, int] | None = None,
+        status_provider: Callable[[], str] | None = None,
         on_close: Callable[[], None] | None = None,
     ) -> None:
         self.parent = parent
@@ -65,6 +66,7 @@ class TargetMapEditorDialog:
         self.target_ip = target_ip
         self.target_port = int(target_port)
         self.origin = origin
+        self.status_provider = status_provider
         self.on_close = on_close
         self.modes = load_map_modes()
         self.mode_names = list(self.modes)
@@ -77,6 +79,7 @@ class TargetMapEditorDialog:
         self.clear_button: tk.Button | None = None
         self.send_button: tk.Button | None = None
         self.cancel_button: tk.Button | None = None
+        self.status_label: tk.Label | None = None
         self.window = tk.Toplevel(parent)
         self.window.title("Target Map Editor")
         self.window.configure(bg=self.theme["bg"])
@@ -99,6 +102,7 @@ class TargetMapEditorDialog:
         self.refresh()
         self.center_window()
         self.animate_in()
+        self.refresh_status_label()
 
     def build_ui(self) -> None:
         surface = self.theme["surface"]
@@ -128,6 +132,14 @@ class TargetMapEditorDialog:
             fg=text,
             font=(self.ui_font_family, 22, "bold"),
         ).pack(side=tk.LEFT)
+        self.status_label = tk.Label(
+            title_bar,
+            text="HOST ...",
+            bg=panel,
+            fg=self.theme["muted"],
+            font=(self.mono_font_family, 11, "bold"),
+        )
+        self.status_label.pack(side=tk.LEFT, padx=(30, 0))
         self.cancel_button = tk.Button(
             title_bar,
             text="CLEAR",
@@ -137,9 +149,9 @@ class TargetMapEditorDialog:
             activebackground=self.theme["surface_alt"],
             activeforeground=text,
             relief=tk.FLAT,
-            font=(self.ui_font_family, 13, "bold"),
-            padx=18,
-            pady=10,
+            font=(self.ui_font_family, 15, "bold"),
+            padx=24,
+            pady=14,
         )
         self.cancel_button.pack(side=tk.RIGHT)
 
@@ -181,17 +193,13 @@ class TargetMapEditorDialog:
             (BLUE, "BLUE", CELL_COLORS[BLUE]),
             (RED, "RED", CELL_COLORS[RED]),
         ):
-            button = tk.Radiobutton(
+            button = tk.Button(
                 left_panel,
                 text=label,
-                value=value,
-                variable=self.selected_color,
                 bg=surface,
                 fg=text,
-                selectcolor=surface,
                 activebackground=surface,
                 activeforeground=text,
-                indicatoron=False,
                 font=(self.ui_font_family, 24, "bold"),
                 padx=18,
                 pady=18,
@@ -227,7 +235,7 @@ class TargetMapEditorDialog:
             relief=tk.FLAT,
             font=(self.ui_font_family, 15, "bold"),
             padx=42,
-            pady=14,
+            pady=21,
         )
         self.send_button.pack(fill=tk.X)
 
@@ -328,6 +336,15 @@ class TargetMapEditorDialog:
                 highlightcolor=CELL_ACTIVE_COLORS.get(value, base_color) if active else base_color,
                 fg=self.theme["active_text"] if active else self.theme["text"],
             )
+
+    def refresh_status_label(self) -> None:
+        if self.status_label is not None and self.status_provider is not None:
+            try:
+                self.status_label.configure(text=self.status_provider())
+            except Exception as exc:
+                self.status_label.configure(text=f"HOST status unavailable: {exc}")
+        if self.window.winfo_exists():
+            self.window.after(500, self.refresh_status_label)
 
     def center_window(self) -> None:
         self.window.update_idletasks()
