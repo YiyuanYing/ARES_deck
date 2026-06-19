@@ -80,6 +80,7 @@ class TargetMapEditorDialog:
         self.send_button: tk.Button | None = None
         self.cancel_button: tk.Button | None = None
         self.status_label: tk.Label | None = None
+        self.send_reset_after_id: str | None = None
         self.window = tk.Toplevel(parent)
         self.window.title("Target Map Editor")
         self.window.configure(bg=self.theme["bg"])
@@ -238,6 +239,7 @@ class TargetMapEditorDialog:
             pady=21,
         )
         self.send_button.pack(fill=tk.X)
+        self.set_send_button_state("idle")
 
         tk.Label(center_panel, text="EXIT  ↑", bg=panel, fg=self.theme["accent"], font=(self.ui_font_family, 17, "bold")).pack(pady=(0, 6))
 
@@ -305,9 +307,11 @@ class TargetMapEditorDialog:
             sent = send_target_map_payload(payload, self.local_ip, self.target_ip, self.target_port)
         except Exception as exc:
             print(f"[map-editor] send failed: {exc}")
+            self.set_send_button_state("failed")
             return
 
         print(f"[map-editor] sent {sent} bytes -> {self.target_ip}:{self.target_port}")
+        self.set_send_button_state("sent")
 
     def refresh(self) -> None:
         selected = int(self.selected_color.get())
@@ -345,6 +349,40 @@ class TargetMapEditorDialog:
                 self.status_label.configure(text=f"HOST status unavailable: {exc}")
         if self.window.winfo_exists():
             self.window.after(500, self.refresh_status_label)
+
+    def set_send_button_state(self, state: str) -> None:
+        if self.send_button is None:
+            return
+        if self.send_reset_after_id is not None:
+            try:
+                self.window.after_cancel(self.send_reset_after_id)
+            except tk.TclError:
+                pass
+            self.send_reset_after_id = None
+
+        if state == "sent":
+            self.send_button.configure(
+                text="SENT",
+                bg=self.theme["ok_dark"],
+                activebackground=self.theme["ok"],
+                fg=self.theme["active_text"],
+            )
+            self.send_reset_after_id = self.window.after(1200, lambda: self.set_send_button_state("idle"))
+        elif state == "failed":
+            self.send_button.configure(
+                text="FAILED",
+                bg=self.theme["danger_bg"],
+                activebackground=self.theme["danger"],
+                fg=self.theme["active_text"],
+            )
+            self.send_reset_after_id = self.window.after(1600, lambda: self.set_send_button_state("idle"))
+        else:
+            self.send_button.configure(
+                text="SEND MAP",
+                bg=self.theme["accent_bg"],
+                activebackground=self.theme["accent"],
+                fg=self.theme["text"],
+            )
 
     def center_window(self) -> None:
         self.window.update_idletasks()
