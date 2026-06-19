@@ -358,26 +358,46 @@ class ControllerPanel:
                 return
             except tk.TclError:
                 self.map_editor_dialog = None
-        self.open_map_editor()
+        self.open_map_editor(button_id)
 
-    def open_map_editor(self) -> None:
+    def open_map_editor(self, origin_button_id: int | None = None) -> None:
         if self.map_editor_dialog is not None:
             try:
                 self.map_editor_dialog.window.lift()
                 return
             except tk.TclError:
                 self.map_editor_dialog = None
+        origin = self.button_screen_origin(origin_button_id)
         self.map_editor_dialog = TargetMapEditorDialog(
             self.root,
             theme=THEME,
             local_ip=self.local_ip,
             target_ip=self.remote_ip,
             target_port=self.map_message_port,
+            origin=origin,
             on_close=self.clear_map_editor_reference,
         )
 
     def clear_map_editor_reference(self) -> None:
         self.map_editor_dialog = None
+
+    def button_screen_origin(self, button_id: int | None) -> tuple[int, int] | None:
+        if button_id is None:
+            return None
+        spec = DISPLAY_BUTTON_MAP.get(button_id) or VIRTUAL_BUTTON_MAP.get(button_id)
+        if not spec:
+            return None
+        sx, sy, _s = self.scale()
+        if spec.get("shape") == "circle":
+            base_x = float(spec["x"])
+            base_y = float(spec["y"])
+        else:
+            base_x = float(spec["x"]) + float(spec.get("w", 0)) / 2.0
+            base_y = float(spec["y"]) + float(spec.get("h", 0)) / 2.0
+        return (
+            self.root.winfo_rootx() + int(base_x * sx),
+            self.root.winfo_rooty() + int(base_y * sy),
+        )
 
     def set_virtual_button(self, button_id: int, state: bool, reason: str) -> None:
         if self.state.virtual_button_toggle.get(button_id, False) == state:

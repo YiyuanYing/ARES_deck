@@ -50,6 +50,7 @@ class TargetMapEditorDialog:
         local_ip: str,
         target_ip: str,
         target_port: int,
+        origin: tuple[int, int] | None = None,
         on_close: Callable[[], None] | None = None,
     ) -> None:
         self.parent = parent
@@ -57,6 +58,7 @@ class TargetMapEditorDialog:
         self.local_ip = local_ip
         self.target_ip = target_ip
         self.target_port = int(target_port)
+        self.origin = origin
         self.on_close = on_close
         self.modes = load_map_modes()
         self.mode_names = list(self.modes)
@@ -79,8 +81,14 @@ class TargetMapEditorDialog:
 
         self.status_var = tk.StringVar(value="选择颜色后点击格子")
         self.counter_var = tk.StringVar(value="")
+        self.color_hint_var = tk.StringVar(value="")
+        self.color_hint_label: tk.Label | None = None
         self.drag_offset_x = 0
         self.drag_offset_y = 0
+        self.target_x = 0
+        self.target_y = 0
+        self.target_width = 640
+        self.target_height = 700
 
         self.build_ui()
         self.refresh()
@@ -94,10 +102,10 @@ class TargetMapEditorDialog:
         text = self.theme["text"]
         muted = self.theme["muted"]
 
-        outer = tk.Frame(self.window, bg=self.theme["bg"], padx=14, pady=14)
+        outer = tk.Frame(self.window, bg=self.theme["bg"], padx=24, pady=24)
         outer.pack(fill=tk.BOTH, expand=True)
 
-        card = tk.Frame(outer, bg=panel, highlightthickness=2, highlightbackground=line, padx=16, pady=12)
+        card = tk.Frame(outer, bg=panel, highlightthickness=2, highlightbackground=line, padx=28, pady=20)
         card.pack(fill=tk.BOTH, expand=True)
 
         title_bar = tk.Frame(card, bg=panel)
@@ -113,7 +121,7 @@ class TargetMapEditorDialog:
             text="TARGET MAP",
             bg=panel,
             fg=text,
-            font=("DejaVu Sans", 17, "bold"),
+            font=("DejaVu Sans", 22, "bold"),
         ).pack(side=tk.LEFT)
         self.cancel_button = tk.Button(
             title_bar,
@@ -124,16 +132,16 @@ class TargetMapEditorDialog:
             activebackground=self.theme["surface_alt"],
             activeforeground=text,
             relief=tk.FLAT,
-            padx=12,
-            pady=6,
+            padx=18,
+            pady=10,
         )
         self.cancel_button.pack(side=tk.RIGHT)
 
-        control = tk.Frame(card, bg=panel, pady=12)
+        control = tk.Frame(card, bg=panel, pady=18)
         control.pack(fill=tk.X)
-        tk.Label(control, text="子模式", bg=panel, fg=muted, font=("DejaVu Sans", 13, "bold")).pack(side=tk.LEFT)
-        self.mode_box = ttk.Combobox(control, values=self.mode_names, textvariable=self.selected_mode, state="readonly", width=18)
-        self.mode_box.pack(side=tk.LEFT, padx=(12, 34), ipady=8)
+        tk.Label(control, text="子模式", bg=panel, fg=muted, font=("DejaVu Sans", 16, "bold")).pack(side=tk.LEFT)
+        self.mode_box = ttk.Combobox(control, values=self.mode_names, textvariable=self.selected_mode, state="readonly", width=24)
+        self.mode_box.pack(side=tk.LEFT, padx=(16, 52), ipady=13)
         self.mode_box.bind("<<ComboboxSelected>>", lambda _event: self.refresh())
 
         for value, label, color in (
@@ -152,17 +160,29 @@ class TargetMapEditorDialog:
                 activebackground=panel,
                 activeforeground=text,
                 indicatoron=False,
-                width=7,
-                padx=11,
-                pady=10,
+                width=9,
+                padx=18,
+                pady=15,
                 relief=tk.FLAT,
-                highlightthickness=2,
+                highlightthickness=3,
                 highlightbackground=color,
+                command=lambda v=value: self.select_color(v),
             )
-            button.pack(side=tk.LEFT, padx=9)
+            button.pack(side=tk.LEFT, padx=15)
             self.color_buttons[value] = button
 
-        tk.Label(card, text="EXIT  ↑", bg=panel, fg=self.theme["accent"], font=("DejaVu Sans", 14, "bold")).pack(pady=(2, 5))
+        self.color_hint_label = tk.Label(
+            card,
+            textvariable=self.color_hint_var,
+            bg=CELL_COLORS[RED],
+            fg=self.theme["text"],
+            font=("DejaVu Sans", 16, "bold"),
+            padx=14,
+            pady=10,
+        )
+        self.color_hint_label.pack(fill=tk.X, pady=(0, 10))
+
+        tk.Label(card, text="EXIT  ↑", bg=panel, fg=self.theme["accent"], font=("DejaVu Sans", 17, "bold")).pack(pady=(2, 7))
 
         grid_frame = tk.Frame(card, bg=panel)
         grid_frame.pack()
@@ -173,20 +193,20 @@ class TargetMapEditorDialog:
                     grid_frame,
                     text="",
                     command=lambda r=row, c=col: self.set_cell(r, c),
-                    width=8,
+                    width=11,
                     height=3,
                     relief=tk.FLAT,
                     bd=0,
-                    font=("DejaVu Sans", 21, "bold"),
+                    font=("DejaVu Sans", 28, "bold"),
                 )
-                button.grid(row=row, column=col, padx=9, pady=7, ipadx=18, ipady=10)
+                button.grid(row=row, column=col, padx=16, pady=8, ipadx=28, ipady=10)
                 button_row.append(button)
             self.cell_buttons.append(button_row)
 
-        tk.Label(card, text="ENTRANCE  ↓", bg=panel, fg=self.theme["ok"], font=("DejaVu Sans", 14, "bold")).pack(pady=(5, 7))
+        tk.Label(card, text="ENTRANCE  ↓", bg=panel, fg=self.theme["ok"], font=("DejaVu Sans", 17, "bold")).pack(pady=(7, 9))
 
-        tk.Label(card, textvariable=self.counter_var, bg=panel, fg=muted, font=("DejaVu Sans Mono", 12)).pack()
-        tk.Label(card, textvariable=self.status_var, bg=panel, fg=self.theme["warning"], font=("DejaVu Sans", 11)).pack(pady=(5, 8))
+        tk.Label(card, textvariable=self.counter_var, bg=panel, fg=muted, font=("DejaVu Sans Mono", 14)).pack()
+        tk.Label(card, textvariable=self.status_var, bg=panel, fg=self.theme["warning"], font=("DejaVu Sans", 13)).pack(pady=(7, 12))
 
         footer = tk.Frame(card, bg=panel)
         footer.pack(fill=tk.X)
@@ -199,8 +219,8 @@ class TargetMapEditorDialog:
             activebackground=self.theme["warning"],
             activeforeground=text,
             relief=tk.FLAT,
-            padx=18,
-            pady=9,
+            padx=36,
+            pady=14,
         )
         self.clear_button.pack(side=tk.LEFT)
         self.send_button = tk.Button(
@@ -212,13 +232,18 @@ class TargetMapEditorDialog:
             activebackground=self.theme["accent"],
             activeforeground=text,
             relief=tk.FLAT,
-            padx=22,
-            pady=9,
+            padx=42,
+            pady=14,
         )
         self.send_button.pack(side=tk.RIGHT)
 
     def current_mode(self) -> MapMode:
         return self.modes[self.selected_mode.get()]
+
+    def select_color(self, value: int) -> None:
+        self.selected_color.set(value)
+        self.status_var.set(f"当前颜色: {COLOR_NAMES[value]}")
+        self.refresh()
 
     def set_cell(self, row: int, col: int) -> None:
         previous = self.edit_grid[row][col]
@@ -258,6 +283,10 @@ class TargetMapEditorDialog:
     def refresh(self) -> None:
         counts = count_cells(self.edit_grid)
         mode = self.current_mode()
+        selected = int(self.selected_color.get())
+        self.color_hint_var.set(f"当前颜色：{COLOR_NAMES[selected]}")
+        if self.color_hint_label is not None:
+            self.color_hint_label.configure(bg=CELL_COLORS[selected])
         self.counter_var.set(
             f"红 {counts[RED]}/{mode.red_max}   蓝 {counts[BLUE]}/{mode.blue_max}   灰 {counts[GRAY]}/{mode.gray_max}"
         )
@@ -279,11 +308,19 @@ class TargetMapEditorDialog:
         parent_y = self.parent.winfo_rooty()
         parent_w = max(self.parent.winfo_width(), 1)
         parent_h = max(self.parent.winfo_height(), 1)
-        width = min(720, max(parent_w - 80, 560))
-        height = min(700, max(parent_h - 80, 560))
-        x = parent_x + (parent_w - width) // 2
-        y = parent_y + (parent_h - height) // 2
-        self.window.geometry(f"{width}x{height}+{x}+{y}")
+        self.target_width = parent_w
+        self.target_height = parent_h
+        self.target_x = parent_x
+        self.target_y = parent_y
+        start_width = max(96, int(self.target_width * 0.12))
+        start_height = max(72, int(self.target_height * 0.10))
+        if self.origin is None:
+            start_x = self.target_x + (self.target_width - start_width) // 2
+            start_y = self.target_y + (self.target_height - start_height) // 2
+        else:
+            start_x = int(self.origin[0] - start_width / 2)
+            start_y = int(self.origin[1] - start_height / 2)
+        self.window.geometry(f"{start_width}x{start_height}+{start_x}+{start_y}")
 
     def handle_screen_touch(self, screen_x: float, screen_y: float) -> bool:
         if not self.window.winfo_exists():
@@ -306,8 +343,7 @@ class TargetMapEditorDialog:
 
         for value, button in self.color_buttons.items():
             if self.widget_contains(button, abs_x, abs_y):
-                self.selected_color.set(value)
-                self.status_var.set(f"当前颜色: {COLOR_NAMES[value]}")
+                self.select_color(value)
                 return True
 
         for row in range(EDIT_HEIGHT):
@@ -340,19 +376,38 @@ class TargetMapEditorDialog:
         try:
             self.window.attributes("-alpha", 0.0)
         except tk.TclError:
+            self.window.geometry(f"{self.target_width}x{self.target_height}+{self.target_x}+{self.target_y}")
             return
 
         start = time.perf_counter()
+        duration = 0.08
 
         def step() -> None:
             elapsed = time.perf_counter() - start
-            alpha = min(1.0, elapsed / 0.12)
+            progress = min(1.0, elapsed / duration)
+            eased = 1.0 - (1.0 - progress) ** 3
+            alpha = eased
+            start_width = max(96, int(self.target_width * 0.12))
+            start_height = max(72, int(self.target_height * 0.10))
+            if self.origin is None:
+                start_x = self.target_x + (self.target_width - start_width) // 2
+                start_y = self.target_y + (self.target_height - start_height) // 2
+            else:
+                start_x = int(self.origin[0] - start_width / 2)
+                start_y = int(self.origin[1] - start_height / 2)
+            width = int(start_width + (self.target_width - start_width) * eased)
+            height = int(start_height + (self.target_height - start_height) * eased)
+            x = int(start_x + (self.target_x - start_x) * eased)
+            y = int(start_y + (self.target_y - start_y) * eased)
             try:
+                self.window.geometry(f"{width}x{height}+{x}+{y}")
                 self.window.attributes("-alpha", alpha)
             except tk.TclError:
                 return
-            if alpha < 1.0 and self.window.winfo_exists():
+            if progress < 1.0 and self.window.winfo_exists():
                 self.window.after(12, step)
+            else:
+                self.window.geometry(f"{self.target_width}x{self.target_height}+{self.target_x}+{self.target_y}")
 
         step()
 
