@@ -131,9 +131,9 @@ class TargetMapEditorDialog:
 
         control = tk.Frame(card, bg=panel, pady=12)
         control.pack(fill=tk.X)
-        tk.Label(control, text="子模式", bg=panel, fg=muted, font=("DejaVu Sans", 12, "bold")).pack(side=tk.LEFT)
-        self.mode_box = ttk.Combobox(control, values=self.mode_names, textvariable=self.selected_mode, state="readonly", width=14)
-        self.mode_box.pack(side=tk.LEFT, padx=(10, 24), ipady=5)
+        tk.Label(control, text="子模式", bg=panel, fg=muted, font=("DejaVu Sans", 13, "bold")).pack(side=tk.LEFT)
+        self.mode_box = ttk.Combobox(control, values=self.mode_names, textvariable=self.selected_mode, state="readonly", width=18)
+        self.mode_box.pack(side=tk.LEFT, padx=(12, 34), ipady=8)
         self.mode_box.bind("<<ComboboxSelected>>", lambda _event: self.refresh())
 
         for value, label, color in (
@@ -152,14 +152,14 @@ class TargetMapEditorDialog:
                 activebackground=panel,
                 activeforeground=text,
                 indicatoron=False,
-                width=6,
-                padx=7,
-                pady=7,
+                width=7,
+                padx=11,
+                pady=10,
                 relief=tk.FLAT,
                 highlightthickness=2,
                 highlightbackground=color,
             )
-            button.pack(side=tk.LEFT, padx=5)
+            button.pack(side=tk.LEFT, padx=9)
             self.color_buttons[value] = button
 
         tk.Label(card, text="EXIT  ↑", bg=panel, fg=self.theme["accent"], font=("DejaVu Sans", 14, "bold")).pack(pady=(2, 5))
