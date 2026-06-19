@@ -6,7 +6,6 @@ from __future__ import annotations
 import time
 import tkinter as tk
 import tkinter.font as tkfont
-from tkinter import ttk
 from typing import Callable, Dict, List
 
 from core.map_message import build_target_map_payload, send_target_map_payload
@@ -74,7 +73,7 @@ class TargetMapEditorDialog:
         self.edit_grid = empty_edit_grid()
         self.cell_buttons: List[List[tk.Button]] = []
         self.color_buttons: Dict[int, tk.Radiobutton] = {}
-        self.mode_box: ttk.Combobox | None = None
+        self.mode_box: tk.Button | None = None
         self.clear_button: tk.Button | None = None
         self.send_button: tk.Button | None = None
         self.cancel_button: tk.Button | None = None
@@ -97,7 +96,8 @@ class TargetMapEditorDialog:
         self.target_y = 0
         self.target_width = 640
         self.target_height = 700
-        self.combo_font = tkfont.Font(family="DejaVu Sans", size=18, weight="bold")
+        self.ui_font_family = self.pick_font_family()
+        self.mono_font_family = "DejaVu Sans Mono"
 
         self.build_ui()
         self.refresh()
@@ -130,7 +130,7 @@ class TargetMapEditorDialog:
             text="TARGET MAP",
             bg=panel,
             fg=text,
-            font=("DejaVu Sans", 22, "bold"),
+            font=(self.ui_font_family, 22, "bold"),
         ).pack(side=tk.LEFT)
         self.cancel_button = tk.Button(
             title_bar,
@@ -141,6 +141,7 @@ class TargetMapEditorDialog:
             activebackground=self.theme["surface_alt"],
             activeforeground=text,
             relief=tk.FLAT,
+            font=(self.ui_font_family, 13, "bold"),
             padx=18,
             pady=10,
         )
@@ -160,17 +161,25 @@ class TargetMapEditorDialog:
         right_panel.pack(side=tk.RIGHT, fill=tk.Y)
         right_panel.pack_propagate(False)
 
-        style = ttk.Style(self.window)
-        style.configure("MapEditor.TCombobox", font=self.combo_font)
-        self.window.option_add("*TCombobox*Listbox*Font", self.combo_font)
+        tk.Label(left_panel, text="子模式", bg=surface, fg=muted, font=(self.ui_font_family, 20, "bold")).pack(anchor="w")
+        self.mode_box = tk.Button(
+            left_panel,
+            text=self.selected_mode.get(),
+            command=self.cycle_mode,
+            bg=self.theme["panel_field"],
+            fg=text,
+            activebackground=self.theme["surface_alt"],
+            activeforeground=text,
+            relief=tk.FLAT,
+            highlightthickness=2,
+            highlightbackground=line,
+            font=(self.ui_font_family, 22, "bold"),
+            padx=18,
+            pady=16,
+        )
+        self.mode_box.pack(fill=tk.X, pady=(12, 30))
 
-        tk.Label(left_panel, text="子模式", bg=surface, fg=muted, font=("DejaVu Sans", 20, "bold")).pack(anchor="w")
-        self.mode_box = ttk.Combobox(left_panel, values=self.mode_names, textvariable=self.selected_mode, state="readonly", width=18)
-        self.mode_box.configure(font=self.combo_font, style="MapEditor.TCombobox")
-        self.mode_box.pack(fill=tk.X, pady=(12, 30), ipady=16)
-        self.mode_box.bind("<<ComboboxSelected>>", lambda _event: self.refresh())
-
-        tk.Label(left_panel, text="选择颜色", bg=surface, fg=muted, font=("DejaVu Sans", 20, "bold")).pack(anchor="w", pady=(0, 14))
+        tk.Label(left_panel, text="选择颜色", bg=surface, fg=muted, font=(self.ui_font_family, 20, "bold")).pack(anchor="w", pady=(0, 14))
 
         for value, label, color in (
             (GRAY, "灰", CELL_COLORS[GRAY]),
@@ -188,7 +197,7 @@ class TargetMapEditorDialog:
                 activebackground=surface,
                 activeforeground=text,
                 indicatoron=False,
-                font=("DejaVu Sans", 22, "bold"),
+                font=(self.ui_font_family, 24, "bold"),
                 padx=18,
                 pady=18,
                 relief=tk.FLAT,
@@ -204,12 +213,12 @@ class TargetMapEditorDialog:
             text="点击子模式框可循环切换",
             bg=surface,
             fg=muted,
-            font=("DejaVu Sans", 10),
+            font=(self.ui_font_family, 12),
             wraplength=250,
             justify="left",
         ).pack(anchor="w", side=tk.BOTTOM)
 
-        tk.Label(center_panel, text="EXIT  ↑", bg=panel, fg=self.theme["accent"], font=("DejaVu Sans", 17, "bold")).pack(pady=(0, 6))
+        tk.Label(center_panel, text="EXIT  ↑", bg=panel, fg=self.theme["accent"], font=(self.ui_font_family, 17, "bold")).pack(pady=(0, 6))
 
         grid_frame = tk.Frame(center_panel, bg=panel)
         grid_frame.pack(expand=True)
@@ -224,27 +233,27 @@ class TargetMapEditorDialog:
                     height=2,
                     relief=tk.FLAT,
                     bd=0,
-                    font=("DejaVu Sans", 28, "bold"),
+                    font=(self.ui_font_family, 28, "bold"),
                 )
                 button.grid(row=row, column=col, padx=12, pady=7, ipadx=28, ipady=12)
                 button_row.append(button)
             self.cell_buttons.append(button_row)
 
-        tk.Label(center_panel, text="ENTRANCE  ↓", bg=panel, fg=self.theme["ok"], font=("DejaVu Sans", 17, "bold")).pack(pady=(6, 0))
+        tk.Label(center_panel, text="ENTRANCE  ↑", bg=panel, fg=self.theme["ok"], font=(self.ui_font_family, 17, "bold")).pack(pady=(6, 0))
 
         self.color_hint_label = tk.Label(
             right_panel,
             textvariable=self.color_hint_var,
             bg=CELL_COLORS[RED],
             fg=self.theme["text"],
-            font=("DejaVu Sans", 16, "bold"),
+            font=(self.ui_font_family, 16, "bold"),
             padx=14,
             pady=16,
         )
         self.color_hint_label.pack(fill=tk.X, pady=(0, 18))
 
-        tk.Label(right_panel, text="数量上限", bg=surface, fg=muted, font=("DejaVu Sans", 16, "bold")).pack(anchor="w")
-        tk.Label(right_panel, textvariable=self.counter_var, bg=surface, fg=text, font=("DejaVu Sans Mono", 15, "bold"), justify="left").pack(
+        tk.Label(right_panel, text="数量上限", bg=surface, fg=muted, font=(self.ui_font_family, 16, "bold")).pack(anchor="w")
+        tk.Label(right_panel, textvariable=self.counter_var, bg=surface, fg=text, font=(self.mono_font_family, 15, "bold"), justify="left").pack(
             fill=tk.X, pady=(10, 22)
         )
         tk.Label(
@@ -252,7 +261,7 @@ class TargetMapEditorDialog:
             textvariable=self.status_var,
             bg=surface,
             fg=self.theme["warning"],
-            font=("DejaVu Sans", 13),
+            font=(self.ui_font_family, 13),
             wraplength=250,
             justify="left",
         ).pack(fill=tk.X, pady=(0, 18))
@@ -268,6 +277,7 @@ class TargetMapEditorDialog:
             activebackground=self.theme["warning"],
             activeforeground=text,
             relief=tk.FLAT,
+            font=(self.ui_font_family, 15, "bold"),
             padx=36,
             pady=14,
         )
@@ -281,6 +291,7 @@ class TargetMapEditorDialog:
             activebackground=self.theme["accent"],
             activeforeground=text,
             relief=tk.FLAT,
+            font=(self.ui_font_family, 15, "bold"),
             padx=42,
             pady=14,
         )
@@ -288,6 +299,13 @@ class TargetMapEditorDialog:
 
     def current_mode(self) -> MapMode:
         return self.modes[self.selected_mode.get()]
+
+    def pick_font_family(self) -> str:
+        families = set(tkfont.families(self.window))
+        for family in ("Noto Sans CJK SC", "Microsoft YaHei", "WenQuanYi Zen Hei", "Arial Unicode MS"):
+            if family in families:
+                return family
+        return "DejaVu Sans"
 
     def select_color(self, value: int) -> None:
         self.selected_color.set(value)
@@ -336,6 +354,8 @@ class TargetMapEditorDialog:
         self.color_hint_var.set(f"当前颜色：{COLOR_NAMES[selected]}")
         if self.color_hint_label is not None:
             self.color_hint_label.configure(bg=CELL_COLORS[selected])
+        if self.mode_box is not None:
+            self.mode_box.configure(text=self.selected_mode.get())
         self.counter_var.set(
             f"红 {counts[RED]}/{mode.red_max}   蓝 {counts[BLUE]}/{mode.blue_max}   灰 {counts[GRAY]}/{mode.gray_max}"
         )
