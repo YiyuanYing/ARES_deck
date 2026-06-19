@@ -13,6 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.params import get_section
+from core.map_message import MAP_MESSAGE_PORT, TargetMapUdpReceiver
 from core.udp_receiver import (
     BIND_IP,
     CONTROL_HZ,
@@ -34,6 +35,18 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="ControllerFrame V2 UDP receiver with 100 Hz state loop.")
     parser.add_argument("--bind-ip", default=params.get("bind_ip", BIND_IP))
     parser.add_argument("--port", type=int, default=params.get("port", PORT))
+    parser.add_argument(
+        "--map-port",
+        type=int,
+        default=params.get("map_port", params.get("port", PORT) + 1 if params.get("port") is not None else MAP_MESSAGE_PORT),
+        help="Low-rate target-map UDP port.",
+    )
+    parser.add_argument(
+        "--no-map-receiver",
+        action="store_true",
+        default=not params.get("map_receiver_enabled", True),
+        help="Disable target-map UDP JSON receiver.",
+    )
     parser.add_argument("--control-hz", type=float, default=params.get("control_hz", CONTROL_HZ))
     parser.add_argument("--print-interval", type=float, default=default_print_interval)
     parser.add_argument(
@@ -54,7 +67,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     receiver = ControllerUdpReceiver(bind_ip=args.bind_ip, port=args.port)
+    map_receiver = None
     receiver.start()
+    if not args.no_map_receiver:
+        map_receiver = TargetMapUdpReceiver(bind_ip=args.bind_ip, port=args.map_port)
+        map_receiver.start()
 
     period = 1.0 / max(args.control_hz, 1.0)
     print_interval = 1.0 / max(args.log_hz, 0.01) if args.log_hz else args.print_interval
@@ -82,6 +99,8 @@ def main() -> None:
         print("[udp] stopped")
     finally:
         receiver.stop()
+        if map_receiver is not None:
+            map_receiver.stop()
 
 
 if __name__ == "__main__":

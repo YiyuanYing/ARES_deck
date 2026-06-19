@@ -22,9 +22,11 @@ app/
 ui/
   config.py             # UI 尺寸、按钮布局、轴映射、默认 UI 参数
   inputs.py             # JoystickReader、TouchReader、HostReachabilityMonitor
+  map_editor/           # 3x4 目标地图编辑弹窗、模式上限配置、地图数据转换
   panel.py              # ControllerPanel、Tkinter 绘制和触屏交互
 
 core/
+  map_message.py        # 低频目标地图 UDP JSON 收发和校验
   protocol.py           # ControllerFrame V2 打包、解析、CRC、axes/buttons/flags 编码
   udp_sender.py         # 固定频率 UDP 发送
   udp_receiver.py       # UDP 接收、latest_state、failsafe、ESTOP latch
@@ -100,11 +102,14 @@ controller_panel:
   local_ip: "10.20.12.220"
   remote_ip: "10.20.99.23"
   port: 5005
+  map_port: 5006
   send_hz: 100.0
 
 udp_receiver:
   bind_ip: "0.0.0.0"
   port: 5005
+  map_port: 5006
+  map_receiver_enabled: true
 
 udp_sender:
   local_ip: "10.20.12.220"
@@ -123,6 +128,7 @@ udp_sender:
 - 改点击后的 UI 行为：修改 `ui/panel.py` 里的 `handle_canvas_touch_xy()`、`toggle_virtual_button()`、`trigger_clear_estop()`。
 - 改手柄或触屏读取：修改 `ui/inputs.py` 里的 `JoystickReader`、`TouchReader`。
 - 改“UI 状态如何发出去”：修改 `ControllerPanel.get_controller_snapshot()`。如果只是显示变化，不要改这里。
+- 改目标地图编辑器：修改 `ui/map_editor/modes.json` 的模式上限，或把 `ui/config.py` 的 `MAP_EDITOR_TRIGGER_BUTTON_ID` 改成需要触发弹窗的按钮 ID。
 
 建议修改后至少运行：
 
@@ -143,6 +149,38 @@ FRAME_FMT = "<HBBHHHHIQQ4h4sI"
 ```
 
 CRC32 计算范围：前 44 bytes，即不包含最后 4 bytes `crc32` 字段。
+
+## 目标地图 UDP JSON
+
+目标地图使用独立低频 UDP JSON 通道，不占用 `ControllerFrame V2`。默认端口是控制端口 `+1`，例如控制帧 `5005`，地图消息 `5006`。
+
+UI 弹窗只编辑中间 `4x3` 区域，发送时自动补成 `6x3`：
+
+- `x=0` 入口行：`[0, 0, 0]`
+- `x=1..4`：来自弹窗，从入口向出口排列
+- `x=5` 出口行：`[0, 0, 0]`
+
+颜色编码沿用 `mf_action_planner`：
+
+- `0`: 空
+- `1`: 蓝色 / KFS1
+- `2`: 红色 / KFS2
+- `3`: 灰色 / 假 KFS
+
+payload 示例：
+
+```json
+{
+  "type": "target_map",
+  "mode": "崇武探幽",
+  "width": 3,
+  "height": 6,
+  "grid": [[0,0,0],[2,1,0],[3,0,0],[1,0,0],[2,0,0],[0,0,0]],
+  "timestamp": 1718400000.0
+}
+```
+
+R1 receiver 收到后会校验尺寸和颜色编码，缓存 `latest_target_map`，并打印 `[map]` 结构化日志。ROS2 Action、`team/method` 和 apriltag 通信格式暂时保留为 TODO。
 
 | Offset | Size | Type | Name | Description |
 |---:|---:|---|---|---|

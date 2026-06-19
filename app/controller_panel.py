@@ -16,6 +16,7 @@ from core.udp_sender import FAILSAFE_TIMEOUT_MS, LOCAL_IP, SEND_HZ, TARGET_IP, T
 from ui.config import (
     BUTTON_ACTIVATION_MODES,
     DEFAULT_BUTTON_ACTIVATION_MODE,
+    DEFAULT_MAP_MESSAGE_PORT,
     PHYSICAL_BUTTON_MODE_MAP,
     TOUCH_DEVICE_PATH,
     TOUCH_INVERT_X,
@@ -60,6 +61,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--local-ip", default=params.get("local_ip", LOCAL_IP), help="Steam Deck LAN IP used for UDP bind.")
     parser.add_argument("--remote-ip", "--target-ip", dest="remote_ip", default=params.get("remote_ip", TARGET_IP), help="Receiver LAN IP.")
     parser.add_argument("--port", type=int, default=params.get("port", TARGET_PORT), help="UDP receiver port.")
+    parser.add_argument(
+        "--map-port",
+        type=int,
+        default=params.get("map_port", DEFAULT_MAP_MESSAGE_PORT),
+        help="Low-rate target-map UDP receiver port.",
+    )
     parser.add_argument("--send-hz", type=float, default=params.get("send_hz", SEND_HZ), help="Controller packets per second.")
     parser.add_argument("--failsafe-timeout-ms", type=int, default=params.get("failsafe_timeout_ms", FAILSAFE_TIMEOUT_MS), help="Failsafe timeout encoded in each frame.")
     parser.add_argument("--touch-device", default=params.get("touch_device", TOUCH_DEVICE_PATH), help="Linux evdev touchscreen path, e.g. /dev/input/event4.")
@@ -104,6 +111,7 @@ def main() -> None:
         args.local_ip,
         args.remote_ip,
         args.port,
+        args.map_port,
         args.send_hz,
         args.failsafe_timeout_ms,
         args.touch_device,

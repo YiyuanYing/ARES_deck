@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+from core.map_message import MAP_MESSAGE_PORT
 from core.udp_sender import FAILSAFE_TIMEOUT_MS, LOCAL_IP, SEND_HZ, TARGET_IP, TARGET_PORT
 
 DEVICE_PATH = "/dev/input/js0"
@@ -17,8 +18,10 @@ CALIBRATION_SECONDS = 1.0
 DEFAULT_LOCAL_IP = LOCAL_IP
 DEFAULT_REMOTE_IP = TARGET_IP
 DEFAULT_UDP_PORT = TARGET_PORT
+DEFAULT_MAP_MESSAGE_PORT = MAP_MESSAGE_PORT
 UDP_SEND_HZ = SEND_HZ
 RESET_PULSE_SECONDS = 0.25
+MAP_EDITOR_TRIGGER_BUTTON_ID = 3  # A 键：按下会打开目标地图编辑器。
 
 UI_COLOR_THEME = "burgundy"  # 可选: "burgundy" 酒红色, "midnight_blue" 墨蓝色
 UI_COLOR_THEMES = {

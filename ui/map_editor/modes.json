@@ -1,0 +1,12 @@
+{
+  "崇武探幽": {
+    "red_max": 2,
+    "blue_max": 2,
+    "gray_max": 1
+  },
+  "武林探秘": {
+    "red_max": 4,
+    "blue_max": 3,
+    "gray_max": 1
+  }
+}

@@ -26,6 +26,7 @@ from ui.config import (
     JS_EVENT_AXIS,
     JS_EVENT_BUTTON,
     JS_EVENT_INIT,
+    MAP_EDITOR_TRIGGER_BUTTON_ID,
     OUTPUT_PHYSICAL_BUTTON_IDS,
     REFRESH_MS,
     RESET_PULSE_SECONDS,
@@ -35,6 +36,7 @@ from ui.config import (
     VIRTUAL_BUTTON_MAP,
 )
 from ui.inputs import HostReachabilityMonitor, JoystickReader, TouchReader
+from ui.map_editor import TargetMapEditorDialog
 
 THEME = UI_COLOR_THEMES.get(UI_COLOR_THEME, UI_COLOR_THEMES["burgundy"])
 BG = THEME["bg"]
@@ -127,6 +129,7 @@ class ControllerPanel:
         local_ip: str,
         remote_ip: str,
         udp_port: int,
+        map_message_port: int,
         send_hz: float,
         failsafe_timeout_ms: int,
         touch_device: str,
@@ -170,6 +173,10 @@ class ControllerPanel:
                 screen_size_provider=self.get_touch_canvas_size,
             )
         self.host_monitor = HostReachabilityMonitor(remote_ip)
+        self.local_ip = local_ip
+        self.remote_ip = remote_ip
+        self.map_message_port = int(map_message_port)
+        self.map_editor_dialog: TargetMapEditorDialog | None = None
         self.udp_sender = ControllerUdpSender(
             state_provider=self.get_controller_snapshot,
             local_ip=local_ip,
@@ -259,6 +266,7 @@ class ControllerPanel:
                 target = f"virtual:{button_id}"
                 if self.touch_already_handled(target):
                     return
+                self.open_map_editor_for_button(button_id)
                 self.press_virtual_button(button_id)
                 if self.debug_touch:
                     print(f"[touch] {source} hit {target} at ({screen_x:.1f},{screen_y:.1f})")
@@ -329,6 +337,32 @@ class ControllerPanel:
             self.set_virtual_button(button_id, True, "momentary")
             return
         self.toggle_virtual_button(button_id)
+
+    def open_map_editor_for_button(self, button_id: int) -> None:
+        if MAP_EDITOR_TRIGGER_BUTTON_ID is None:
+            return
+        if int(button_id) != int(MAP_EDITOR_TRIGGER_BUTTON_ID):
+            return
+        self.open_map_editor()
+
+    def open_map_editor(self) -> None:
+        if self.map_editor_dialog is not None:
+            try:
+                self.map_editor_dialog.window.lift()
+                return
+            except tk.TclError:
+                self.map_editor_dialog = None
+        self.map_editor_dialog = TargetMapEditorDialog(
+            self.root,
+            theme=THEME,
+            local_ip=self.local_ip,
+            target_ip=self.remote_ip,
+            target_port=self.map_message_port,
+            on_close=self.clear_map_editor_reference,
+        )
+
+    def clear_map_editor_reference(self) -> None:
+        self.map_editor_dialog = None
 
     def set_virtual_button(self, button_id: int, state: bool, reason: str) -> None:
         if self.state.virtual_button_toggle.get(button_id, False) == state:
@@ -482,6 +516,8 @@ class ControllerPanel:
 
         mode = self.physical_button_mode(button_id)
         button_name = DISPLAY_BUTTON_MAP.get(button_id, {}).get("name", BUTTON_NAMES.get(button_id, f"BUTTON_{button_id}"))
+        if is_pressed and not was_pressed:
+            self.open_map_editor_for_button(button_id)
         if mode == "momentary":
             if self.state.button_toggle.get(button_id, False) != is_pressed:
                 self.state.button_toggle[button_id] = is_pressed
