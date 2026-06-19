@@ -242,13 +242,13 @@ class TargetMapEditorDialog:
                     grid_frame,
                     text="",
                     command=lambda r=row, c=col: self.set_cell(r, c),
-                    width=5,
+                    width=7,
                     height=2,
                     relief=tk.FLAT,
                     bd=0,
-                    font=(self.ui_font_family, 24, "bold"),
+                    font=(self.ui_font_family, 30, "bold"),
                 )
-                button.grid(row=row, column=col, padx=8, pady=6, ipadx=20, ipady=10)
+                button.grid(row=row, column=col, padx=12, pady=8, ipadx=32, ipady=16)
                 button_row.append(button)
             self.cell_buttons.append(button_row)
 
@@ -324,8 +324,8 @@ class TargetMapEditorDialog:
                 text=COLOR_NAMES[value],
                 bg=CELL_ACTIVE_COLORS.get(value, base_color) if active else self.theme["panel_field"],
                 activebackground=CELL_ACTIVE_COLORS.get(value, base_color),
-                highlightbackground=self.theme["active_glow"] if active else base_color,
-                highlightcolor=self.theme["active_glow"] if active else base_color,
+                highlightbackground=CELL_ACTIVE_COLORS.get(value, base_color) if active else base_color,
+                highlightcolor=CELL_ACTIVE_COLORS.get(value, base_color) if active else base_color,
                 fg=self.theme["active_text"] if active else self.theme["text"],
             )
 
