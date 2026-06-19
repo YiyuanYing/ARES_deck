@@ -86,10 +86,6 @@ class TargetMapEditorDialog:
         self.window.resizable(False, False)
         self.window.withdraw()
 
-        self.status_var = tk.StringVar(value="Select a color, then tap cells")
-        self.counter_var = tk.StringVar(value="")
-        self.color_hint_var = tk.StringVar(value="")
-        self.color_hint_label: tk.Label | None = None
         self.drag_offset_x = 0
         self.drag_offset_y = 0
         self.target_x = 0
@@ -151,7 +147,6 @@ class TargetMapEditorDialog:
         body.pack(fill=tk.BOTH, expand=True)
         body.grid_columnconfigure(0, minsize=290, weight=0)
         body.grid_columnconfigure(1, weight=1)
-        body.grid_columnconfigure(2, minsize=290, weight=0)
         body.grid_rowconfigure(0, weight=1)
 
         left_panel = tk.Frame(body, bg=surface, highlightthickness=2, highlightbackground=line, padx=16, pady=16, width=290)
@@ -160,10 +155,6 @@ class TargetMapEditorDialog:
 
         center_panel = tk.Frame(body, bg=panel, padx=14)
         center_panel.grid(row=0, column=1, sticky="nsew")
-
-        right_panel = tk.Frame(body, bg=surface, highlightthickness=2, highlightbackground=line, padx=16, pady=16, width=290)
-        right_panel.grid(row=0, column=2, sticky="ns")
-        right_panel.pack_propagate(False)
 
         tk.Label(left_panel, text="MISSION MODE", bg=surface, fg=muted, font=(self.ui_font_family, 18, "bold")).pack(anchor="w")
         self.mode_box = tk.Button(
@@ -263,31 +254,6 @@ class TargetMapEditorDialog:
 
         tk.Label(center_panel, text="ENTRANCE  ↑", bg=panel, fg=self.theme["ok"], font=(self.ui_font_family, 17, "bold")).pack(pady=(6, 0))
 
-        self.color_hint_label = tk.Label(
-            right_panel,
-            textvariable=self.color_hint_var,
-            bg=CELL_COLORS[RED],
-            fg=self.theme["text"],
-            font=(self.ui_font_family, 16, "bold"),
-            padx=14,
-            pady=16,
-        )
-        self.color_hint_label.pack(fill=tk.X, pady=(0, 18))
-
-        tk.Label(right_panel, text="LIMITS", bg=surface, fg=muted, font=(self.ui_font_family, 16, "bold")).pack(anchor="w")
-        tk.Label(right_panel, textvariable=self.counter_var, bg=surface, fg=text, font=(self.mono_font_family, 15, "bold"), justify="left").pack(
-            fill=tk.X, pady=(10, 22)
-        )
-        tk.Label(
-            right_panel,
-            textvariable=self.status_var,
-            bg=surface,
-            fg=self.theme["warning"],
-            font=(self.ui_font_family, 13),
-            wraplength=250,
-            justify="left",
-        ).pack(fill=tk.X, pady=(0, 18))
-
     def current_mode(self) -> MapMode:
         return self.modes[self.selected_mode.get()]
 
@@ -300,7 +266,6 @@ class TargetMapEditorDialog:
 
     def select_color(self, value: int) -> None:
         self.selected_color.set(value)
-        self.status_var.set(f"Current color: {COLOR_NAMES[value]}")
         self.refresh()
 
     def set_cell(self, row: int, col: int) -> None:
@@ -314,16 +279,14 @@ class TargetMapEditorDialog:
         try:
             validate_edit_grid(candidate, self.current_mode())
         except ValueError as exc:
-            self.status_var.set(str(exc))
+            print(f"[map-editor] {exc}")
             return
 
         self.edit_grid = candidate
-        self.status_var.set("Map updated")
         self.refresh()
 
     def clear(self) -> None:
         self.edit_grid = empty_edit_grid()
-        self.status_var.set("Map cleared")
         self.refresh()
 
     def send(self) -> None:
@@ -333,23 +296,15 @@ class TargetMapEditorDialog:
             payload = build_target_map_payload(self.current_mode().name, full_grid)
             sent = send_target_map_payload(payload, self.local_ip, self.target_ip, self.target_port)
         except Exception as exc:
-            self.status_var.set(f"Send failed: {exc}")
+            print(f"[map-editor] send failed: {exc}")
             return
 
-        self.status_var.set(f"Sent {sent} bytes -> {self.target_ip}:{self.target_port}")
+        print(f"[map-editor] sent {sent} bytes -> {self.target_ip}:{self.target_port}")
 
     def refresh(self) -> None:
-        counts = count_cells(self.edit_grid)
-        mode = self.current_mode()
         selected = int(self.selected_color.get())
-        self.color_hint_var.set(f"CURRENT COLOR: {COLOR_NAMES[selected]}")
-        if self.color_hint_label is not None:
-            self.color_hint_label.configure(bg=CELL_COLORS[selected])
         if self.mode_box is not None:
             self.mode_box.configure(text=self.selected_mode.get())
-        self.counter_var.set(
-            f"RED  {counts[RED]}/{mode.red_max}\nBLUE {counts[BLUE]}/{mode.blue_max}\nGRAY {counts[GRAY]}/{mode.gray_max}"
-        )
         for row in range(EDIT_HEIGHT):
             for col in range(EDIT_WIDTH):
                 value = int(self.edit_grid[row][col])
@@ -366,8 +321,8 @@ class TargetMapEditorDialog:
             active = value == selected_color
             base_color = CELL_COLORS[value]
             button.configure(
-                text=f"{COLOR_NAMES[value]}  ● ACTIVE" if active else COLOR_NAMES[value],
-                bg=CELL_ACTIVE_COLORS.get(value, base_color) if active else self.theme["surface"],
+                text=COLOR_NAMES[value],
+                bg=CELL_ACTIVE_COLORS.get(value, base_color) if active else self.theme["panel_field"],
                 activebackground=CELL_ACTIVE_COLORS.get(value, base_color),
                 highlightbackground=self.theme["active_glow"] if active else base_color,
                 highlightcolor=self.theme["active_glow"] if active else base_color,
@@ -430,7 +385,6 @@ class TargetMapEditorDialog:
         current = self.selected_mode.get()
         index = self.mode_names.index(current) if current in self.mode_names else 0
         self.selected_mode.set(self.mode_names[(index + 1) % len(self.mode_names)])
-        self.status_var.set(f"Mode: {self.selected_mode.get()}")
         self.refresh()
 
     @staticmethod
