@@ -15,7 +15,8 @@ udp_receiver:
   bind_ip: "0.0.0.0"
   port: 5005
   control_hz: 100.0
-  print_interval: 0.05
+  log_hz: 50.0
+  log_format: "block"
 
 udp_sender:
   local_ip: "192.168.1.20"

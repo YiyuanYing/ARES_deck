@@ -13,8 +13,46 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from app.params import get_section
 from core.udp_sender import FAILSAFE_TIMEOUT_MS, LOCAL_IP, SEND_HZ, TARGET_IP, TARGET_PORT
-from ui.config import TOUCH_DEVICE_PATH, TOUCH_INVERT_X, TOUCH_INVERT_Y, TOUCH_SWAP_XY
+from ui.config import (
+    BUTTON_ACTIVATION_MODES,
+    DEFAULT_BUTTON_ACTIVATION_MODE,
+    PHYSICAL_BUTTON_MODE_MAP,
+    TOUCH_DEVICE_PATH,
+    TOUCH_INVERT_X,
+    TOUCH_INVERT_Y,
+    TOUCH_SWAP_XY,
+)
 from ui.panel import ControllerPanel
+
+
+def parse_button_modes(value: str | None) -> dict[int, str]:
+    modes: dict[int, str] = {}
+    if not value:
+        return modes
+
+    for item in str(value).split(","):
+        item = item.strip()
+        if not item:
+            continue
+        if "=" in item:
+            key_text, mode = item.split("=", 1)
+        elif ":" in item:
+            key_text, mode = item.split(":", 1)
+        else:
+            raise argparse.ArgumentTypeError(f"button mode item must be ID=mode: {item}")
+
+        try:
+            button_id = int(key_text.strip())
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError(f"invalid button id in mode item: {item}") from exc
+
+        mode = mode.strip().lower()
+        if mode not in BUTTON_ACTIVATION_MODES:
+            choices = ", ".join(BUTTON_ACTIVATION_MODES)
+            raise argparse.ArgumentTypeError(f"invalid activation mode '{mode}', expected one of: {choices}")
+        modes[button_id] = mode
+    return modes
+
 
 def parse_args() -> argparse.Namespace:
     params = get_section("controller_panel")
@@ -30,11 +68,38 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--touch-invert-x", action="store_true", default=params.get("touch_invert_x", TOUCH_INVERT_X), help="Invert touchscreen X axis.")
     parser.add_argument("--touch-invert-y", action="store_true", default=params.get("touch_invert_y", TOUCH_INVERT_Y), help="Invert touchscreen Y axis.")
     parser.add_argument("--debug-touch", action="store_true", default=params.get("debug_touch", False), help="Print raw and mapped touchscreen coordinates.")
+    parser.add_argument(
+        "--virtual-button-mode-default",
+        choices=BUTTON_ACTIVATION_MODES,
+        default=DEFAULT_BUTTON_ACTIVATION_MODE,
+        help="Default activation mode for virtual touch buttons.",
+    )
+    parser.add_argument(
+        "--virtual-button-modes",
+        type=parse_button_modes,
+        default=None,
+        help="Temporary virtual activation override, e.g. 32=toggle,33=momentary.",
+    )
+    parser.add_argument(
+        "--physical-button-mode-default",
+        choices=BUTTON_ACTIVATION_MODES,
+        default=DEFAULT_BUTTON_ACTIVATION_MODE,
+        help="Default activation mode for physical controller buttons.",
+    )
+    parser.add_argument(
+        "--physical-button-modes",
+        type=parse_button_modes,
+        default=None,
+        help="Temporary physical activation override, e.g. 3=momentary,4=toggle.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    virtual_button_modes = dict(args.virtual_button_modes or {})
+    physical_button_modes = dict(PHYSICAL_BUTTON_MODE_MAP)
+    physical_button_modes.update(args.physical_button_modes or {})
     panel = ControllerPanel(
         args.local_ip,
         args.remote_ip,
@@ -47,6 +112,10 @@ def main() -> None:
         args.touch_invert_x,
         args.touch_invert_y,
         args.debug_touch,
+        args.virtual_button_mode_default,
+        virtual_button_modes,
+        args.physical_button_mode_default,
+        physical_button_modes,
     )
     panel.run()
 

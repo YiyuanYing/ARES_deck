@@ -19,17 +19,35 @@ from core.udp_receiver import (
     PORT,
     PRINT_INTERVAL_SECONDS,
     ControllerUdpReceiver,
+    build_status_block,
     build_status_line,
 )
 
 
 def parse_args() -> argparse.Namespace:
     params = get_section("udp_receiver")
+    default_log_hz = params.get("log_hz")
+    default_print_interval = params.get("print_interval")
+    if default_print_interval is None:
+        default_print_interval = 1.0 / max(float(default_log_hz), 0.01) if default_log_hz else PRINT_INTERVAL_SECONDS
+
     parser = argparse.ArgumentParser(description="ControllerFrame V2 UDP receiver with 100 Hz state loop.")
     parser.add_argument("--bind-ip", default=params.get("bind_ip", BIND_IP))
     parser.add_argument("--port", type=int, default=params.get("port", PORT))
     parser.add_argument("--control-hz", type=float, default=params.get("control_hz", CONTROL_HZ))
-    parser.add_argument("--print-interval", type=float, default=params.get("print_interval", PRINT_INTERVAL_SECONDS))
+    parser.add_argument("--print-interval", type=float, default=default_print_interval)
+    parser.add_argument(
+        "--log-hz",
+        type=float,
+        default=default_log_hz,
+        help="Receiver debug output frequency in Hz. Overrides --print-interval when set.",
+    )
+    parser.add_argument(
+        "--log-format",
+        choices=("block", "line"),
+        default=params.get("log_format", "block"),
+        help="Receiver debug output style. 'block' is easier to scan; 'line' is compact.",
+    )
     return parser.parse_args()
 
 
@@ -39,6 +57,7 @@ def main() -> None:
     receiver.start()
 
     period = 1.0 / max(args.control_hz, 1.0)
+    print_interval = 1.0 / max(args.log_hz, 0.01) if args.log_hz else args.print_interval
     next_tick = time.perf_counter()
     next_print = next_tick
     try:
@@ -50,14 +69,17 @@ def main() -> None:
 
             state = receiver.update_state()
             if now >= next_print:
-                print(f"\r{build_status_line(state):<700}", end="", flush=True)
-                next_print = now + max(args.print_interval, 0.01)
+                if args.log_format == "line":
+                    print(build_status_line(state), flush=True)
+                else:
+                    print(build_status_block(state), flush=True)
+                next_print = now + max(print_interval, 0.01)
 
             next_tick += period
             if next_tick < now - period:
                 next_tick = now + period
     except KeyboardInterrupt:
-        print("\n[udp] stopped")
+        print("[udp] stopped")
     finally:
         receiver.stop()
 

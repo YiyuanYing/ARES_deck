@@ -204,49 +204,63 @@ buttons 使用 128-bit bitmask：
 - Button `32~95`: 屏幕虚拟按键
 - Button `96~127`: 系统保留、调试、扩展
 
-Steam Deck `/dev/input/js0` 当前实体按键映射：
+Steam Deck `/dev/input/js0` 当前实体按键映射如下。当前 GUI 会显示并发送 `2~23`，`0~1` 的左右触控板按钮暂时没有加入 `OUTPUT_PHYSICAL_BUTTON_IDS`。
 
-| ID | Name |
+| ID | Protocol Name | UI Label |
+|---:|---|---|
+| 0 | LEFT_TRACKPAD | - |
+| 1 | RIGHT_TRACKPAD | - |
+| 2 | QUICK_ACCESS | `...` |
+| 3 | A | `A` |
+| 4 | B | `B` |
+| 5 | X | `X` |
+| 6 | Y | `Y` |
+| 7 | LB | `LB` |
+| 8 | RB | `RB` |
+| 9 | LT_FULL | `LT` |
+| 10 | RT_FULL | `RT` |
+| 11 | VIEW | `VIEW` |
+| 12 | MENU | `MENU` |
+| 13 | STEAM | `STEAM` |
+| 14 | L3 | - |
+| 15 | R3 | - |
+| 16 | DPAD_UP | `UP` |
+| 17 | DPAD_DOWN | `DOWN` |
+| 18 | DPAD_LEFT | `LEFT` |
+| 19 | DPAD_RIGHT | `RIGHT` |
+| 20 | L4 | `L4` |
+| 21 | R4 | `R4` |
+| 22 | L5 | `L5` |
+| 23 | R5 | `R5` |
+
+摇杆轴映射：
+
+| Axis ID | Name |
 |---:|---|
-| 0 | LEFT_TRACKPAD |
-| 1 | RIGHT_TRACKPAD |
-| 2 | QUICK_ACCESS |
-| 3 | A |
-| 4 | B |
-| 5 | X |
-| 6 | Y |
-| 7 | LB |
-| 8 | RB |
-| 9 | LT_FULL |
-| 10 | RT_FULL |
-| 11 | VIEW |
-| 12 | MENU |
-| 13 | STEAM |
-| 14 | L3 |
-| 15 | R3 |
-| 16 | DPAD_UP |
-| 17 | DPAD_DOWN |
-| 18 | DPAD_LEFT |
-| 19 | DPAD_RIGHT |
-| 20 | L4 |
-| 21 | R4 |
-| 22 | L5 |
-| 23 | R5 |
+| 0 | Left Stick X |
+| 1 | Left Stick Y |
+| 2 | Right Stick X |
+| 3 | Right Stick Y |
 
-GUI 当前有 8 个屏幕虚拟按钮，标签为 `Button1` 到 `Button8`，发送 ID 为 `32~39`。协议层当前保留这些 ID 的语义名：
+GUI 当前有 8 个屏幕虚拟按钮，标签为 `BTN 1` 到 `BTN 8`，发送 ID 为 `32~39`。协议层当前保留这些 ID 的语义名：
 
 | ID | Protocol Name | GUI Label |
 |---:|---|---|
-| 32 | VIRTUAL_ESTOP | Button1 |
-| 33 | VIRTUAL_ENABLE | Button2 |
-| 34 | VIRTUAL_LOW_SPEED | Button3 |
-| 35 | VIRTUAL_HIGH_SPEED | Button4 |
-| 36 | VIRTUAL_AUTO_MODE | Button5 |
-| 37 | VIRTUAL_RESET | Button6 |
-| 38 | VIRTUAL_AUX_1 | Button7 |
-| 39 | VIRTUAL_AUX_2 | Button8 |
+| 32 | VIRTUAL_ESTOP | `BTN 1` |
+| 33 | VIRTUAL_ENABLE | `BTN 2` |
+| 34 | VIRTUAL_LOW_SPEED | `BTN 3` |
+| 35 | VIRTUAL_HIGH_SPEED | `BTN 4` |
+| 36 | VIRTUAL_AUTO_MODE | `BTN 5` |
+| 37 | VIRTUAL_RESET | `BTN 6` |
+| 38 | VIRTUAL_AUX_1 | `BTN 7` |
+| 39 | VIRTUAL_AUX_2 | `BTN 8` |
 
-发送端默认发送 GUI 的绿色 toggle 状态：按一下锁存为 True，再按一下解除。实体按键和屏幕虚拟按键都会合并到 `buttons` bitmask。
+按键激活方式在 `ui/config.py` 中配置：
+
+- `toggle`: 按一次锁存为 True，再按一次解除。
+- `momentary`: 按住为 True，松开为 False。
+
+屏幕虚拟按钮在 `VIRTUAL_BUTTON_MAP` 的每个按钮条目里设置 `"mode"`。Steam Deck 实体按钮在 `PHYSICAL_BUTTON_MODE_MAP` 里按 ID 设置。实体按键和屏幕虚拟按键都会合并到 `buttons` bitmask。
 
 ## Flags
 

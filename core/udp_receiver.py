@@ -26,7 +26,7 @@ from core.protocol import (
 BIND_IP = "0.0.0.0"
 PORT = 5005
 CONTROL_HZ = 100.0
-PRINT_INTERVAL_SECONDS = 0.05
+PRINT_INTERVAL_SECONDS = 0.2
 WARNING_TIMEOUT_MS = 50.0
 MIN_FAILSAFE_TIMEOUT_MS = 50
 MAX_FAILSAFE_TIMEOUT_MS = 300
@@ -286,6 +286,65 @@ def format_frame(frame: dict | None) -> str:
         "crc32": f"0x{raw.get('crc32', 0):08X}",
     }
     return repr(compact)
+
+
+def format_flags(flags: dict) -> str:
+    active = [name for name, value in flags.items() if value]
+    return ",".join(active) if active else "-"
+
+
+def format_bad_packets(bad_packets: dict) -> str:
+    active = [f"{name}={count}" for name, count in bad_packets.items() if count]
+    return " ".join(active) if active else "-"
+
+
+def build_status_block(state: dict) -> str:
+    timestamp = time.strftime("%H:%M:%S")
+    addr = state.get("from")
+    addr_text = f"{addr[0]}:{addr[1]}" if addr else "-"
+    bad_packets = state["stats"].get("bad_packets", {})
+    bad_total = sum(bad_packets.values())
+
+    if state["remote_timeout"]:
+        status_text = "TIMEOUT -> ESTOP"
+    elif state["flags"].get("estop", False):
+        status_text = "ESTOP"
+    elif state.get("warning"):
+        status_text = "WARN"
+    elif state.get("online"):
+        status_text = "ONLINE"
+    else:
+        status_text = "WAITING"
+
+    lines = [
+        f"[{timestamp}] ControllerFrame V2 receiver  status={status_text}",
+        (
+            f"  link      from={addr_text} seq={state['seq']} "
+            f"rx={state['rx_rate']:.0f}/s age={state['age_ms']:.0f}ms "
+            f"failsafe={state['failsafe_timeout_ms']}ms"
+        ),
+        (
+            f"  quality   lost={state['lost']} ({state['lost_percent']:.2f}%) "
+            f"ooo={state['ooo']} jitter={state['jitter_ms']:.1f}ms "
+            f"bad={bad_total}"
+        ),
+        f"  axes      {format_axes(state['axes'])}",
+        f"  flags     {format_flags(state['flags'])}",
+        f"  buttons   {format_buttons(state['buttons'])}",
+    ]
+    if bad_total:
+        lines.append(f"  bad_pkts  {format_bad_packets(bad_packets)}")
+    if state.get("frame"):
+        frame = state["frame"]
+        raw = frame.get("raw", {})
+        lines.append(
+            "  frame     "
+            f"magic=0x{frame.get('magic', 0):04X} ver={frame.get('version')} "
+            f"type={frame.get('msg_type')} len={frame.get('length')} "
+            f"flags_raw={frame.get('flags_raw')} ts={frame.get('timestamp_ms')} "
+            f"crc=0x{raw.get('crc32', 0):08X}"
+        )
+    return "\n".join(lines)
 
 
 def build_status_line(state: dict) -> str:

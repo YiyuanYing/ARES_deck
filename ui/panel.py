@@ -7,6 +7,7 @@ import queue
 import statistics
 import time
 import tkinter as tk
+import math
 from dataclasses import dataclass, field
 from typing import Dict, List, Tuple
 
@@ -17,6 +18,7 @@ from ui.config import (
     BASE_HEIGHT,
     BASE_WIDTH,
     CALIBRATION_SECONDS,
+    DEFAULT_BUTTON_ACTIVATION_MODE,
     DEADZONE,
     DEVICE_PATH,
     DISPLAY_BUTTON_MAP,
@@ -27,10 +29,49 @@ from ui.config import (
     OUTPUT_PHYSICAL_BUTTON_IDS,
     REFRESH_MS,
     RESET_PULSE_SECONDS,
+    UI_COLOR_THEME,
+    UI_COLOR_THEMES,
     VIRTUAL_BUTTON_IDS,
     VIRTUAL_BUTTON_MAP,
 )
 from ui.inputs import HostReachabilityMonitor, JoystickReader, TouchReader
+
+THEME = UI_COLOR_THEMES.get(UI_COLOR_THEME, UI_COLOR_THEMES["burgundy"])
+BG = THEME["bg"]
+SURFACE = THEME["surface"]
+SURFACE_ALT = THEME["surface_alt"]
+LINE = THEME["line"]
+TEXT = THEME["text"]
+MUTED = THEME["muted"]
+GREEN = THEME["ok"]
+GREEN_DARK = THEME["ok_dark"]
+ACTIVE_GLOW = THEME["active_glow"]
+ACTIVE_TEXT = THEME["active_text"]
+YELLOW = THEME["warning"]
+RED = THEME["danger"]
+BLUE = THEME["accent"]
+PANEL_DARK = THEME["panel_dark"]
+PANEL_FIELD = THEME["panel_field"]
+STICK_BG = THEME["stick_bg"]
+WARN_BG = THEME["warn_bg"]
+ACCENT_BG = THEME["accent_bg"]
+DANGER_BG = THEME["danger_bg"]
+BUTTON_IDLE = THEME["button_idle"]
+BUTTON_PRESSED = THEME["button_pressed"]
+BUTTON_IDLE_OUTLINE = THEME["button_idle_outline"]
+
+
+def blend_color(color_a: str, color_b: str, ratio: float) -> str:
+    ratio = max(0.0, min(1.0, ratio))
+    a = color_a.lstrip("#")
+    b = color_b.lstrip("#")
+    rgb = []
+    for index in range(0, 6, 2):
+        value_a = int(a[index : index + 2], 16)
+        value_b = int(b[index : index + 2], 16)
+        rgb.append(round(value_a + (value_b - value_a) * ratio))
+    return f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
+
 
 def on_button_toggled(button_id: int, name: str, state: bool) -> None:
     """TODO: 后续在这里加入机器人控制指令发送逻辑。"""
@@ -73,15 +114,19 @@ class ControllerPanel:
         touch_invert_x: bool,
         touch_invert_y: bool,
         debug_touch: bool,
+        virtual_button_mode_default: str = DEFAULT_BUTTON_ACTIVATION_MODE,
+        virtual_button_modes: Dict[int, str] | None = None,
+        physical_button_mode_default: str = DEFAULT_BUTTON_ACTIVATION_MODE,
+        physical_button_modes: Dict[int, str] | None = None,
     ) -> None:
         self.root = tk.Tk()
         self.root.title("SUSTECH-ARES ROBOCON2026")
-        self.root.configure(bg="#111418")
+        self.root.configure(bg=BG)
         self.root.geometry(f"{BASE_WIDTH}x{BASE_HEIGHT}")
         self.fullscreen = True
         self.root.attributes("-fullscreen", self.fullscreen)
 
-        self.canvas = tk.Canvas(self.root, bg="#111418", highlightthickness=0)
+        self.canvas = tk.Canvas(self.root, bg=BG, highlightthickness=0)
         self.canvas.pack(fill=tk.BOTH, expand=True)
 
         self.state = ControllerState()
@@ -119,6 +164,12 @@ class ControllerPanel:
         self.calibration_samples: Dict[int, List[int]] = {i: [] for i in AXIS_MAP}
         self.virtual_button_until: Dict[int, float] = {}
         self.active_touch_target = ""
+        self.virtual_button_mode_default = virtual_button_mode_default
+        self.virtual_button_modes = dict(virtual_button_modes or {})
+        self.physical_button_mode_default = physical_button_mode_default
+        self.physical_button_modes = dict(physical_button_modes or {})
+        self.button_light_levels: Dict[Tuple[str, int], float] = {}
+        self.last_animation_at = time.monotonic()
 
         self.root.bind("<F11>", self.toggle_fullscreen)
         self.root.bind("<Control-q>", self.exit_program)
@@ -171,7 +222,7 @@ class ControllerPanel:
         _ = event
         if self.state.touch_connected:
             return
-        self.active_touch_target = ""
+        self.release_active_touch_target()
 
     def handle_canvas_touch_xy(self, screen_x: float, screen_y: float, source: str = "touch") -> None:
         sx, sy, _s = self.scale()
@@ -187,7 +238,7 @@ class ControllerPanel:
                 target = f"virtual:{button_id}"
                 if self.touch_already_handled(target):
                     return
-                self.toggle_virtual_button(button_id)
+                self.press_virtual_button(button_id)
                 if self.debug_touch:
                     print(f"[touch] {source} hit {target} at ({screen_x:.1f},{screen_y:.1f})")
                 self.redraw_now()
@@ -220,16 +271,55 @@ class ControllerPanel:
         self.active_touch_target = target
         return False
 
+    def release_active_touch_target(self) -> None:
+        target = self.active_touch_target
+        self.active_touch_target = ""
+        if not target.startswith("virtual:"):
+            return
+
+        try:
+            button_id = int(target.split(":", 1)[1])
+        except ValueError:
+            return
+        if self.virtual_button_mode(button_id) != "momentary":
+            return
+
+        self.state.virtual_button_toggle[button_id] = False
+        spec = VIRTUAL_BUTTON_MAP.get(button_id, {})
+        button_name = spec.get("name", BUTTON_NAMES.get(button_id, f"BUTTON_{button_id}"))
+        print(f"[virtual] {button_id:02d} {button_name} momentary -> False")
+        self.redraw_now()
+
     def redraw_now(self) -> None:
         self.draw()
         self.canvas.update_idletasks()
 
-    def toggle_virtual_button(self, button_id: int) -> None:
-        new_state = not self.state.virtual_button_toggle.get(button_id, False)
-        self.state.virtual_button_toggle[button_id] = new_state
+    def virtual_button_mode(self, button_id: int) -> str:
+        spec = VIRTUAL_BUTTON_MAP.get(button_id, {})
+        mode = self.virtual_button_modes.get(button_id, spec.get("mode", self.virtual_button_mode_default))
+        return mode if mode in {"toggle", "momentary"} else DEFAULT_BUTTON_ACTIVATION_MODE
+
+    def physical_button_mode(self, button_id: int) -> str:
+        mode = self.physical_button_modes.get(button_id, self.physical_button_mode_default)
+        return mode if mode in {"toggle", "momentary"} else DEFAULT_BUTTON_ACTIVATION_MODE
+
+    def press_virtual_button(self, button_id: int) -> None:
+        if self.virtual_button_mode(button_id) == "momentary":
+            self.set_virtual_button(button_id, True, "momentary")
+            return
+        self.toggle_virtual_button(button_id)
+
+    def set_virtual_button(self, button_id: int, state: bool, reason: str) -> None:
+        if self.state.virtual_button_toggle.get(button_id, False) == state:
+            return
+        self.state.virtual_button_toggle[button_id] = state
         spec = VIRTUAL_BUTTON_MAP.get(button_id, {})
         button_name = spec.get("name", BUTTON_NAMES.get(button_id, f"BUTTON_{button_id}"))
-        print(f"[virtual] {button_id:02d} {button_name} toggled -> {new_state}")
+        print(f"[virtual] {button_id:02d} {button_name} {reason} -> {state}")
+
+    def toggle_virtual_button(self, button_id: int) -> None:
+        new_state = not self.state.virtual_button_toggle.get(button_id, False)
+        self.set_virtual_button(button_id, new_state, "toggled")
 
     def trigger_clear_estop(self) -> None:
         estop_button_id = BUTTON_IDS["VIRTUAL_ESTOP"]
@@ -340,7 +430,7 @@ class ControllerPanel:
                 continue
 
             if kind == "touch_release":
-                self.active_touch_target = ""
+                self.release_active_touch_target()
                 continue
 
             if kind != "js_event":
@@ -365,13 +455,23 @@ class ControllerPanel:
 
         # 初始化事件只同步当前物理状态，不视为一次真实按下。
         if is_init:
+            if self.physical_button_mode(button_id) == "momentary":
+                self.state.button_toggle[button_id] = is_pressed
             return
 
-        # 只在 0 -> 1 上升沿切换 toggle 状态，松开时不改变绿色显示。
+        mode = self.physical_button_mode(button_id)
+        button_name = DISPLAY_BUTTON_MAP.get(button_id, {}).get("name", BUTTON_NAMES.get(button_id, f"BUTTON_{button_id}"))
+        if mode == "momentary":
+            if self.state.button_toggle.get(button_id, False) != is_pressed:
+                self.state.button_toggle[button_id] = is_pressed
+                on_button_toggled(button_id, button_name, is_pressed)
+                self.redraw_now()
+            return
+
+        # Toggle 模式只在 0 -> 1 上升沿切换状态，松开时不改变绿色显示。
         if is_pressed and not was_pressed:
             new_state = not self.state.button_toggle[button_id]
             self.state.button_toggle[button_id] = new_state
-            button_name = DISPLAY_BUTTON_MAP.get(button_id, {}).get("name", BUTTON_NAMES.get(button_id, f"BUTTON_{button_id}"))
             on_button_toggled(button_id, button_name, new_state)
             self.redraw_now()
 
@@ -415,15 +515,17 @@ class ControllerPanel:
         return value * sy
 
     def draw(self) -> None:
+        self.update_animation_clock()
         self.canvas.delete("all")
         width = self.canvas.winfo_width()
         height = self.canvas.winfo_height()
         self.touch_canvas_width = max(width, 1)
         self.touch_canvas_height = max(height, 1)
-        self.canvas.create_rectangle(0, 0, width, height, fill="#111418", outline="")
+        self.canvas.create_rectangle(0, 0, width, height, fill=BG, outline="")
 
         self.draw_header()
         self.draw_edge_guides()
+        self.draw_axis_widgets()
         self.draw_virtual_buttons()
 
         for button_id, spec in DISPLAY_BUTTON_MAP.items():
@@ -431,83 +533,168 @@ class ControllerPanel:
 
         self.draw_footer()
 
+    def update_animation_clock(self) -> None:
+        now = time.monotonic()
+        self.animation_dt = min(max(now - self.last_animation_at, 0.0), 0.05)
+        self.last_animation_at = now
+
+    def button_light_level(self, kind: str, button_id: int, active: bool) -> float:
+        key = (kind, button_id)
+        current = self.button_light_levels.get(key, 0.0)
+        target = 1.0 if active else 0.0
+        step = self.animation_dt / 0.08
+        if current < target:
+            current = min(target, current + step)
+        elif current > target:
+            current = max(target, current - step)
+
+        if current <= 0.0 and not active:
+            self.button_light_levels.pop(key, None)
+        else:
+            self.button_light_levels[key] = current
+        return current
+
+    @staticmethod
+    def ease_light(value: float) -> float:
+        value = max(0.0, min(1.0, value))
+        return value * value * (3.0 - 2.0 * value)
+
     def draw_header(self) -> None:
-        device_color = "#6ee7a8" if self.state.connected else "#ff6b6b"
+        device_color = GREEN if self.state.connected else RED
         metrics = self.udp_sender.snapshot_metrics()
         host_reachable, host_checked_at = self.host_monitor.snapshot()
         host_fresh = host_checked_at > 0.0 and time.monotonic() - host_checked_at <= 2.5
         host_ok = host_reachable and host_fresh
-        host_color = "#6ee7a8" if host_ok else "#ff8b8b"
+        host_color = GREEN if host_ok else RED
         if host_ok:
             host_text = f"HOST connected -> {metrics.target_ip}:{metrics.target_port}"
         elif not host_fresh:
             host_text = f"HOST checking -> {metrics.target_ip}:{metrics.target_port}"
-            host_color = "#ffd447"
+            host_color = YELLOW
         else:
             host_text = f"HOST disconnected -> {metrics.target_ip}:{metrics.target_port}"
         device_text = self.state.status_text.splitlines()[0]
+        self.rounded_rect(28, 24, 1252, 126, 8, fill=SURFACE, outline=LINE, width=2)
         self.canvas.create_text(
-            self.x(640),
-            self.y(36),
-            text="SUSTECH-ARES ROBOCON2026",
-            fill="#f2f4f8",
+            self.x(54),
+            self.y(48),
+            text="SUSTECH-ARES",
+            fill=TEXT,
             font=("DejaVu Sans", 25, "bold"),
+            anchor="w",
         )
         self.canvas.create_text(
-            self.x(465),
-            self.y(78),
-            text=device_text,
-            fill=device_color,
-            font=("DejaVu Sans", 14, "bold"),
+            self.x(54),
+            self.y(86),
+            text="ROBOCON 2026 CONTROL DECK",
+            fill=MUTED,
+            font=("DejaVu Sans", 13, "bold"),
+            anchor="w",
         )
-        self.canvas.create_text(
-            self.x(820),
-            self.y(78),
-            text=host_text,
-            fill=host_color,
-            font=("DejaVu Sans", 14, "bold"),
-        )
+        self.draw_status_pill(404, 40, 374, "DEVICE", device_text, device_color)
+        self.draw_status_pill(804, 40, 420, "LINK", host_text, host_color)
         if self.state.status_is_error:
-            self.canvas.create_text(
-                self.x(640),
-                self.y(112),
-                text="sudo usermod -aG input $USER    sudo reboot",
-                fill="#ff9d9d",
-                font=("DejaVu Sans Mono", 13),
-            )
+            detail_text = "sudo usermod -aG input $USER    sudo reboot"
+            detail_color = RED
         elif self.calibrating:
-            self.canvas.create_text(
-                self.x(640),
-                self.y(112),
-                text="Calibrating stick centers...",
-                fill="#ffd447",
-                font=("DejaVu Sans", 14, "bold"),
-            )
+            detail_text = "Calibrating stick centers..."
+            detail_color = YELLOW
         else:
             if self.state.touch_connected:
-                touch_color = "#6ee7a8"
+                touch_color = GREEN
             elif self.state.touch_status_is_error:
-                touch_color = "#ff8b8b"
+                touch_color = RED
             else:
-                touch_color = "#ffd447"
-            self.canvas.create_text(
-                self.x(640),
-                self.y(112),
-                text=self.state.touch_status_text[:96],
-                fill=touch_color,
-                font=("DejaVu Sans Mono", 11),
-            )
-        self.canvas.create_line(self.x(145), self.y(132), self.x(1135), self.y(132), fill="#242a32", width=2)
+                touch_color = YELLOW
+            detail_text = self.state.touch_status_text[:96]
+            detail_color = touch_color
+        self.canvas.create_text(
+            self.x(640),
+            self.y(118),
+            text=detail_text,
+            fill=detail_color,
+            font=("DejaVu Sans Mono", 11),
+        )
+
+    def draw_status_pill(self, x: float, y: float, width: float, title: str, value: str, color: str) -> None:
+        self.rounded_rect(x, y, x + width, y + 54, 8, fill=PANEL_DARK, outline=LINE, width=2)
+        self.circle(x + 20, y + 27, 5, fill=color, outline=color, width=1)
+        self.canvas.create_text(
+            self.x(x + 36),
+            self.y(y + 18),
+            text=title,
+            fill=MUTED,
+            font=("DejaVu Sans", 9, "bold"),
+            anchor="w",
+        )
+        self.canvas.create_text(
+            self.x(x + 36),
+            self.y(y + 36),
+            text=value[:46],
+            fill=TEXT,
+            font=("DejaVu Sans", 12, "bold"),
+            anchor="w",
+        )
 
     def draw_edge_guides(self) -> None:
-        self.canvas.create_line(self.x(145), self.y(132), self.x(145), self.y(690), fill="#20262e", width=2)
-        self.canvas.create_line(self.x(1135), self.y(132), self.x(1135), self.y(690), fill="#20262e", width=2)
+        self.rounded_rect(28, 150, 132, 686, 8, fill=SURFACE, outline=LINE, width=2)
+        self.rounded_rect(1148, 150, 1252, 686, 8, fill=SURFACE, outline=LINE, width=2)
+        self.rounded_rect(150, 150, 1130, 626, 8, fill=PANEL_FIELD, outline=LINE, width=2)
+        self.canvas.create_text(
+            self.x(164),
+            self.y(160),
+            text="TOUCH ACTIONS",
+            fill=MUTED,
+            font=("DejaVu Sans", 11, "bold"),
+            anchor="w",
+        )
+
+    def draw_axis_widgets(self) -> None:
+        axes = self.state.axis_values
+        self.draw_stick_widget(234, 654, "LEFT", axes.get(0, 0.0), axes.get(1, 0.0))
+        self.draw_stick_widget(1046, 654, "RIGHT", axes.get(2, 0.0), axes.get(3, 0.0))
+
+    def draw_stick_widget(self, cx: float, cy: float, label: str, ax: float, ay: float) -> None:
+        self.rounded_rect(cx - 88, cy - 44, cx + 88, cy + 44, 8, fill=SURFACE, outline=LINE, width=2)
+        self.circle(cx - 46, cy, 24, fill=STICK_BG, outline=LINE, width=2)
+        self.canvas.create_line(self.x(cx - 70), self.y(cy), self.x(cx - 22), self.y(cy), fill=LINE, width=1)
+        self.canvas.create_line(self.x(cx - 46), self.y(cy - 24), self.x(cx - 46), self.y(cy + 24), fill=LINE, width=1)
+        self.circle(cx - 46 + ax * 18.0, cy + ay * 18.0, 6, fill=BLUE, outline=BLUE, width=1)
+        self.canvas.create_text(
+            self.x(cx - 4),
+            self.y(cy - 12),
+            text=label,
+            fill=TEXT,
+            font=("DejaVu Sans", 12, "bold"),
+            anchor="w",
+        )
+        self.canvas.create_text(
+            self.x(cx - 4),
+            self.y(cy + 13),
+            text=f"x={ax:+.2f}  y={ay:+.2f}",
+            fill=MUTED,
+            font=("DejaVu Sans Mono", 10),
+            anchor="w",
+        )
 
     def draw_virtual_buttons(self) -> None:
         for button_id, spec in VIRTUAL_BUTTON_MAP.items():
             active = self.state.virtual_button_toggle.get(button_id, False)
-            fill = "#1fbf75" if active else "#29313a"
-            outline = "#7df0b4" if active else "#596575"
+            light = self.ease_light(self.button_light_level("virtual", button_id, active))
+            fill = blend_color(SURFACE_ALT, GREEN_DARK, light)
+            pulse = self.active_pulse(button_id) * light
+            outline = blend_color(LINE, blend_color(GREEN, ACTIVE_GLOW, pulse), light)
+            if light > 0.02:
+                self.rounded_rect(
+                    spec["x"] - 5,
+                    spec["y"] - 5,
+                    spec["x"] + spec["w"] + 5,
+                    spec["y"] + spec["h"] + 5,
+                    spec["radius"] + 2,
+                    fill="",
+                    outline=blend_color(LINE, blend_color(GREEN_DARK, ACTIVE_GLOW, pulse), light),
+                    width=2,
+                )
             self.rounded_rect(
                 spec["x"],
                 spec["y"],
@@ -516,32 +703,51 @@ class ControllerPanel:
                 spec["radius"],
                 fill=fill,
                 outline=outline,
-                width=3,
+                width=2 + round(light * 2),
+            )
+            self.canvas.create_text(
+                self.x(spec["x"] + 18),
+                self.y(spec["y"] + 20),
+                text=f"{button_id}",
+                fill=blend_color(MUTED, ACTIVE_TEXT, light),
+                font=("DejaVu Sans Mono", 11, "bold"),
+                anchor="w",
+            )
+            mode_label = "HOLD" if self.virtual_button_mode(button_id) == "momentary" else "TOGGLE"
+            self.canvas.create_text(
+                self.x(spec["x"] + spec["w"] - 18),
+                self.y(spec["y"] + 20),
+                text=mode_label,
+                fill=blend_color(MUTED, ACTIVE_TEXT, light),
+                font=("DejaVu Sans Mono", 10, "bold"),
+                anchor="e",
             )
             self.canvas.create_text(
                 self.x(spec["x"] + spec["w"] / 2),
                 self.y(spec["y"] + spec["h"] / 2),
                 text=spec["label"],
-                fill="#f2f4f8",
-                font=("DejaVu Sans", 18, "bold"),
+                fill=blend_color(TEXT, ACTIVE_TEXT, light),
+                font=("DejaVu Sans", 24, "bold"),
                 justify="center",
             )
 
     def draw_footer(self) -> None:
         for action, spec in FOOTER_TOUCH_BUTTONS.items():
-            fill = "#2c3440"
             if action == "clear_estop":
-                outline = "#ffd447"
+                fill = WARN_BG
+                outline = YELLOW
             elif action == "exit_fullscreen":
-                outline = "#6ee7a8"
+                fill = ACCENT_BG
+                outline = BLUE
             else:
-                outline = "#ff8b8b"
+                fill = DANGER_BG
+                outline = RED
             self.rounded_rect(
                 spec["x"],
                 spec["y"],
                 spec["x"] + spec["w"],
                 spec["y"] + spec["h"],
-                16,
+                8,
                 fill=fill,
                 outline=outline,
                 width=2,
@@ -550,8 +756,8 @@ class ControllerPanel:
                 self.x(spec["x"] + spec["w"] / 2),
                 self.y(spec["y"] + spec["h"] / 2),
                 text=self.footer_button_label(action, spec),
-                fill="#f2f4f8",
-                font=("DejaVu Sans", 15, "bold"),
+                fill=TEXT,
+                font=("DejaVu Sans", 14, "bold"),
             )
 
     def footer_button_label(self, action: str, spec: Dict) -> str:
@@ -561,28 +767,56 @@ class ControllerPanel:
 
     def draw_button(self, button_id: int, spec: Dict) -> None:
         toggled = self.state.button_toggle.get(button_id, False)
-        fill = "#1fbf75" if toggled else "#29313a"
-        outline = "#7df0b4" if toggled else "#596575"
-        width = 3 if toggled else 2
+        pressed = self.state.button_physical.get(button_id, False)
+        light = self.ease_light(self.button_light_level("physical", button_id, toggled))
+        if light > 0.0:
+            fill = blend_color(BUTTON_IDLE, GREEN_DARK, light)
+            outline = blend_color(BUTTON_IDLE_OUTLINE, blend_color(GREEN, ACTIVE_GLOW, self.active_pulse(button_id) * light), light)
+            width = 2 + round(light * 2)
+        elif pressed:
+            fill = BUTTON_PRESSED
+            outline = BLUE
+            width = 3
+        else:
+            fill = BUTTON_IDLE
+            outline = BUTTON_IDLE_OUTLINE
+            width = 2
         shape = spec["shape"]
 
         if shape == "circle":
+            if light > 0.02:
+                self.circle(spec["x"], spec["y"], spec["r"] + 5, fill="", outline=outline, width=2)
             self.circle(spec["x"], spec["y"], spec["r"], fill=fill, outline=outline, width=width)
         elif shape == "rounded_rect":
+            if light > 0.02:
+                self.rounded_rect(
+                    spec["x"] - 4,
+                    spec["y"] - 4,
+                    spec["x"] + spec["w"] + 4,
+                    spec["y"] + spec["h"] + 4,
+                    min(spec.get("radius", 8), 8),
+                    fill="",
+                    outline=outline,
+                    width=2,
+                )
             self.rounded_rect(
                 spec["x"],
                 spec["y"],
                 spec["x"] + spec["w"],
                 spec["y"] + spec["h"],
-                spec.get("radius", 12),
+                min(spec.get("radius", 8), 8),
                 fill=fill,
                 outline=outline,
                 width=width,
             )
 
-        self.draw_button_label(spec)
+        self.draw_button_label(spec, light)
 
-    def draw_button_label(self, spec: Dict) -> None:
+    def active_pulse(self, button_id: int) -> float:
+        phase = time.monotonic() * 3.6 + button_id * 0.37
+        return 0.5 + 0.5 * math.sin(phase)
+
+    def draw_button_label(self, spec: Dict, light: float = 0.0) -> None:
         shape = spec["shape"]
         if shape == "circle":
             cx = spec["x"]
@@ -592,19 +826,19 @@ class ControllerPanel:
             cx = spec["x"] + spec["w"] / 2
             cy = spec["y"] + spec["h"] / 2
             if spec["w"] < 35:
-                font_size = 9
+                font_size = 8
             elif spec["w"] < 60:
-                font_size = 11
+                font_size = 10
             elif spec["w"] < 90:
-                font_size = 13
+                font_size = 12
             else:
-                font_size = 15
+                font_size = 14
 
         self.canvas.create_text(
             self.x(cx),
             self.y(cy),
             text=spec["label"],
-            fill="#f2f4f8",
+            fill=blend_color(TEXT, ACTIVE_TEXT, light),
             font=("DejaVu Sans", font_size, "bold"),
         )
 
