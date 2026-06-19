@@ -78,6 +78,7 @@ class TargetMapEditorDialog:
         self.window.overrideredirect(True)
         self.window.protocol("WM_DELETE_WINDOW", self.cancel)
         self.window.resizable(False, False)
+        self.window.withdraw()
 
         self.status_var = tk.StringVar(value="选择颜色后点击格子")
         self.counter_var = tk.StringVar(value="")
@@ -105,11 +106,11 @@ class TargetMapEditorDialog:
         outer = tk.Frame(self.window, bg=self.theme["bg"], padx=24, pady=24)
         outer.pack(fill=tk.BOTH, expand=True)
 
-        card = tk.Frame(outer, bg=panel, highlightthickness=2, highlightbackground=line, padx=28, pady=20)
+        card = tk.Frame(outer, bg=panel, highlightthickness=2, highlightbackground=line, padx=24, pady=18)
         card.pack(fill=tk.BOTH, expand=True)
 
         title_bar = tk.Frame(card, bg=panel)
-        title_bar.pack(fill=tk.X)
+        title_bar.pack(fill=tk.X, pady=(0, 18))
         title_bar.bind("<ButtonPress-1>", self.begin_drag)
         title_bar.bind("<B1-Motion>", self.drag_window)
         dots = tk.Frame(title_bar, bg=panel)
@@ -137,12 +138,26 @@ class TargetMapEditorDialog:
         )
         self.cancel_button.pack(side=tk.RIGHT)
 
-        control = tk.Frame(card, bg=panel, pady=18)
-        control.pack(fill=tk.X)
-        tk.Label(control, text="子模式", bg=panel, fg=muted, font=("DejaVu Sans", 16, "bold")).pack(side=tk.LEFT)
-        self.mode_box = ttk.Combobox(control, values=self.mode_names, textvariable=self.selected_mode, state="readonly", width=24)
-        self.mode_box.pack(side=tk.LEFT, padx=(16, 52), ipady=13)
+        body = tk.Frame(card, bg=panel)
+        body.pack(fill=tk.BOTH, expand=True)
+
+        left_panel = tk.Frame(body, bg=surface, highlightthickness=2, highlightbackground=line, padx=18, pady=18, width=310)
+        left_panel.pack(side=tk.LEFT, fill=tk.Y)
+        left_panel.pack_propagate(False)
+
+        center_panel = tk.Frame(body, bg=panel, padx=22)
+        center_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        right_panel = tk.Frame(body, bg=surface, highlightthickness=2, highlightbackground=line, padx=18, pady=18, width=310)
+        right_panel.pack(side=tk.RIGHT, fill=tk.Y)
+        right_panel.pack_propagate(False)
+
+        tk.Label(left_panel, text="子模式", bg=surface, fg=muted, font=("DejaVu Sans", 16, "bold")).pack(anchor="w")
+        self.mode_box = ttk.Combobox(left_panel, values=self.mode_names, textvariable=self.selected_mode, state="readonly", width=18)
+        self.mode_box.pack(fill=tk.X, pady=(10, 26), ipady=12)
         self.mode_box.bind("<<ComboboxSelected>>", lambda _event: self.refresh())
+
+        tk.Label(left_panel, text="选择颜色", bg=surface, fg=muted, font=("DejaVu Sans", 16, "bold")).pack(anchor="w", pady=(0, 12))
 
         for value, label, color in (
             (GRAY, "灰", CELL_COLORS[GRAY]),
@@ -150,42 +165,40 @@ class TargetMapEditorDialog:
             (RED, "红", CELL_COLORS[RED]),
         ):
             button = tk.Radiobutton(
-                control,
+                left_panel,
                 text=label,
                 value=value,
                 variable=self.selected_color,
-                bg=panel,
+                bg=surface,
                 fg=text,
                 selectcolor=surface,
-                activebackground=panel,
+                activebackground=surface,
                 activeforeground=text,
                 indicatoron=False,
-                width=9,
                 padx=18,
-                pady=15,
+                pady=18,
                 relief=tk.FLAT,
                 highlightthickness=3,
                 highlightbackground=color,
                 command=lambda v=value: self.select_color(v),
             )
-            button.pack(side=tk.LEFT, padx=15)
+            button.pack(fill=tk.X, pady=10)
             self.color_buttons[value] = button
 
-        self.color_hint_label = tk.Label(
-            card,
-            textvariable=self.color_hint_var,
-            bg=CELL_COLORS[RED],
-            fg=self.theme["text"],
-            font=("DejaVu Sans", 16, "bold"),
-            padx=14,
-            pady=10,
-        )
-        self.color_hint_label.pack(fill=tk.X, pady=(0, 10))
+        tk.Label(
+            left_panel,
+            text="点击子模式框可循环切换",
+            bg=surface,
+            fg=muted,
+            font=("DejaVu Sans", 10),
+            wraplength=250,
+            justify="left",
+        ).pack(anchor="w", side=tk.BOTTOM)
 
-        tk.Label(card, text="EXIT  ↑", bg=panel, fg=self.theme["accent"], font=("DejaVu Sans", 17, "bold")).pack(pady=(2, 7))
+        tk.Label(center_panel, text="EXIT  ↑", bg=panel, fg=self.theme["accent"], font=("DejaVu Sans", 18, "bold")).pack(pady=(0, 8))
 
-        grid_frame = tk.Frame(card, bg=panel)
-        grid_frame.pack()
+        grid_frame = tk.Frame(center_panel, bg=panel)
+        grid_frame.pack(expand=True)
         for row in range(EDIT_HEIGHT):
             button_row: List[tk.Button] = []
             for col in range(EDIT_WIDTH):
@@ -193,23 +206,45 @@ class TargetMapEditorDialog:
                     grid_frame,
                     text="",
                     command=lambda r=row, c=col: self.set_cell(r, c),
-                    width=11,
-                    height=3,
+                    width=8,
+                    height=2,
                     relief=tk.FLAT,
                     bd=0,
-                    font=("DejaVu Sans", 28, "bold"),
+                    font=("DejaVu Sans", 34, "bold"),
                 )
-                button.grid(row=row, column=col, padx=16, pady=8, ipadx=28, ipady=10)
+                button.grid(row=row, column=col, padx=14, pady=9, ipadx=40, ipady=18)
                 button_row.append(button)
             self.cell_buttons.append(button_row)
 
-        tk.Label(card, text="ENTRANCE  ↓", bg=panel, fg=self.theme["ok"], font=("DejaVu Sans", 17, "bold")).pack(pady=(7, 9))
+        tk.Label(center_panel, text="ENTRANCE  ↓", bg=panel, fg=self.theme["ok"], font=("DejaVu Sans", 18, "bold")).pack(pady=(8, 0))
 
-        tk.Label(card, textvariable=self.counter_var, bg=panel, fg=muted, font=("DejaVu Sans Mono", 14)).pack()
-        tk.Label(card, textvariable=self.status_var, bg=panel, fg=self.theme["warning"], font=("DejaVu Sans", 13)).pack(pady=(7, 12))
+        self.color_hint_label = tk.Label(
+            right_panel,
+            textvariable=self.color_hint_var,
+            bg=CELL_COLORS[RED],
+            fg=self.theme["text"],
+            font=("DejaVu Sans", 16, "bold"),
+            padx=14,
+            pady=16,
+        )
+        self.color_hint_label.pack(fill=tk.X, pady=(0, 18))
 
-        footer = tk.Frame(card, bg=panel)
-        footer.pack(fill=tk.X)
+        tk.Label(right_panel, text="数量上限", bg=surface, fg=muted, font=("DejaVu Sans", 16, "bold")).pack(anchor="w")
+        tk.Label(right_panel, textvariable=self.counter_var, bg=surface, fg=text, font=("DejaVu Sans Mono", 15, "bold"), justify="left").pack(
+            fill=tk.X, pady=(10, 22)
+        )
+        tk.Label(
+            right_panel,
+            textvariable=self.status_var,
+            bg=surface,
+            fg=self.theme["warning"],
+            font=("DejaVu Sans", 13),
+            wraplength=250,
+            justify="left",
+        ).pack(fill=tk.X, pady=(0, 18))
+
+        footer = tk.Frame(right_panel, bg=surface)
+        footer.pack(fill=tk.X, side=tk.BOTTOM)
         self.clear_button = tk.Button(
             footer,
             text="清空",
@@ -222,7 +257,7 @@ class TargetMapEditorDialog:
             padx=36,
             pady=14,
         )
-        self.clear_button.pack(side=tk.LEFT)
+        self.clear_button.pack(fill=tk.X, pady=(0, 12))
         self.send_button = tk.Button(
             footer,
             text="发送地图",
@@ -235,7 +270,7 @@ class TargetMapEditorDialog:
             padx=42,
             pady=14,
         )
-        self.send_button.pack(side=tk.RIGHT)
+        self.send_button.pack(fill=tk.X)
 
     def current_mode(self) -> MapMode:
         return self.modes[self.selected_mode.get()]
@@ -312,8 +347,8 @@ class TargetMapEditorDialog:
         self.target_height = parent_h
         self.target_x = parent_x
         self.target_y = parent_y
-        start_width = max(96, int(self.target_width * 0.12))
-        start_height = max(72, int(self.target_height * 0.10))
+        start_width = 52
+        start_height = 40
         if self.origin is None:
             start_x = self.target_x + (self.target_width - start_width) // 2
             start_y = self.target_y + (self.target_height - start_height) // 2
@@ -374,11 +409,14 @@ class TargetMapEditorDialog:
 
     def animate_in(self) -> None:
         try:
-            self.window.attributes("-alpha", 0.0)
+            self.window.attributes("-alpha", 0.35)
         except tk.TclError:
             self.window.geometry(f"{self.target_width}x{self.target_height}+{self.target_x}+{self.target_y}")
+            self.window.deiconify()
             return
 
+        self.window.deiconify()
+        self.window.lift()
         start = time.perf_counter()
         duration = 0.08
 
@@ -386,9 +424,9 @@ class TargetMapEditorDialog:
             elapsed = time.perf_counter() - start
             progress = min(1.0, elapsed / duration)
             eased = 1.0 - (1.0 - progress) ** 3
-            alpha = eased
-            start_width = max(96, int(self.target_width * 0.12))
-            start_height = max(72, int(self.target_height * 0.10))
+            alpha = 0.35 + 0.65 * eased
+            start_width = 52
+            start_height = 40
             if self.origin is None:
                 start_x = self.target_x + (self.target_width - start_width) // 2
                 start_y = self.target_y + (self.target_height - start_height) // 2
