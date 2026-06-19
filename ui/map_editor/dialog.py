@@ -134,8 +134,8 @@ class TargetMapEditorDialog:
         ).pack(side=tk.LEFT)
         self.cancel_button = tk.Button(
             title_bar,
-            text="CANCEL",
-            command=self.cancel,
+            text="CLEAR",
+            command=self.clear,
             bg=surface,
             fg=muted,
             activebackground=self.theme["surface_alt"],
@@ -149,16 +149,20 @@ class TargetMapEditorDialog:
 
         body = tk.Frame(card, bg=panel)
         body.pack(fill=tk.BOTH, expand=True)
+        body.grid_columnconfigure(0, minsize=290, weight=0)
+        body.grid_columnconfigure(1, weight=1)
+        body.grid_columnconfigure(2, minsize=290, weight=0)
+        body.grid_rowconfigure(0, weight=1)
 
-        left_panel = tk.Frame(body, bg=surface, highlightthickness=2, highlightbackground=line, padx=18, pady=18, width=310)
-        left_panel.pack(side=tk.LEFT, fill=tk.Y)
+        left_panel = tk.Frame(body, bg=surface, highlightthickness=2, highlightbackground=line, padx=16, pady=16, width=290)
+        left_panel.grid(row=0, column=0, sticky="ns")
         left_panel.pack_propagate(False)
 
-        center_panel = tk.Frame(body, bg=panel, padx=22)
-        center_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        center_panel = tk.Frame(body, bg=panel, padx=14)
+        center_panel.grid(row=0, column=1, sticky="nsew")
 
-        right_panel = tk.Frame(body, bg=surface, highlightthickness=2, highlightbackground=line, padx=18, pady=18, width=310)
-        right_panel.pack(side=tk.RIGHT, fill=tk.Y)
+        right_panel = tk.Frame(body, bg=surface, highlightthickness=2, highlightbackground=line, padx=16, pady=16, width=290)
+        right_panel.grid(row=0, column=2, sticky="ns")
         right_panel.pack_propagate(False)
 
         tk.Label(left_panel, text="MISSION MODE", bg=surface, fg=muted, font=(self.ui_font_family, 18, "bold")).pack(anchor="w")
@@ -216,7 +220,25 @@ class TargetMapEditorDialog:
             font=(self.ui_font_family, 12),
             wraplength=250,
             justify="left",
-        ).pack(anchor="w", side=tk.BOTTOM)
+        ).pack(anchor="w", pady=(12, 0))
+
+        footer = tk.Frame(left_panel, bg=surface)
+        footer.pack(fill=tk.X, side=tk.BOTTOM)
+        self.clear_button = self.cancel_button
+        self.send_button = tk.Button(
+            footer,
+            text="SEND MAP",
+            command=self.send,
+            bg=self.theme["accent_bg"],
+            fg=text,
+            activebackground=self.theme["accent"],
+            activeforeground=text,
+            relief=tk.FLAT,
+            font=(self.ui_font_family, 15, "bold"),
+            padx=42,
+            pady=14,
+        )
+        self.send_button.pack(fill=tk.X)
 
         tk.Label(center_panel, text="EXIT  ↑", bg=panel, fg=self.theme["accent"], font=(self.ui_font_family, 17, "bold")).pack(pady=(0, 6))
 
@@ -229,13 +251,13 @@ class TargetMapEditorDialog:
                     grid_frame,
                     text="",
                     command=lambda r=row, c=col: self.set_cell(r, c),
-                    width=7,
+                    width=5,
                     height=2,
                     relief=tk.FLAT,
                     bd=0,
-                    font=(self.ui_font_family, 28, "bold"),
+                    font=(self.ui_font_family, 24, "bold"),
                 )
-                button.grid(row=row, column=col, padx=12, pady=7, ipadx=28, ipady=12)
+                button.grid(row=row, column=col, padx=8, pady=6, ipadx=20, ipady=10)
                 button_row.append(button)
             self.cell_buttons.append(button_row)
 
@@ -265,37 +287,6 @@ class TargetMapEditorDialog:
             wraplength=250,
             justify="left",
         ).pack(fill=tk.X, pady=(0, 18))
-
-        footer = tk.Frame(right_panel, bg=surface)
-        footer.pack(fill=tk.X, side=tk.BOTTOM)
-        self.clear_button = tk.Button(
-            footer,
-            text="CLEAR",
-            command=self.clear,
-            bg=self.theme["warn_bg"],
-            fg=text,
-            activebackground=self.theme["warning"],
-            activeforeground=text,
-            relief=tk.FLAT,
-            font=(self.ui_font_family, 15, "bold"),
-            padx=36,
-            pady=14,
-        )
-        self.clear_button.pack(fill=tk.X, pady=(0, 12))
-        self.send_button = tk.Button(
-            footer,
-            text="SEND MAP",
-            command=self.send,
-            bg=self.theme["accent_bg"],
-            fg=text,
-            activebackground=self.theme["accent"],
-            activeforeground=text,
-            relief=tk.FLAT,
-            font=(self.ui_font_family, 15, "bold"),
-            padx=42,
-            pady=14,
-        )
-        self.send_button.pack(fill=tk.X)
 
     def current_mode(self) -> MapMode:
         return self.modes[self.selected_mode.get()]
@@ -410,7 +401,7 @@ class TargetMapEditorDialog:
         abs_y = self.parent.winfo_rooty() + int(screen_y)
 
         if self.cancel_button is not None and self.widget_contains(self.cancel_button, abs_x, abs_y):
-            self.cancel()
+            self.clear()
             return True
         if self.clear_button is not None and self.widget_contains(self.clear_button, abs_x, abs_y):
             self.clear()
