@@ -25,7 +25,7 @@ ACTION_COMMAND_MESSAGE_TYPE = "action_command"
 MAP_WIDTH = 3
 MAP_HEIGHT = 6
 MAP_ALLOWED_VALUES = {0, 1, 2, 3}
-ACTION_COMMAND_ACTIONS = {"select", "place"}
+ACTION_COMMAND_ACTIONS = {"select", "place", "release"}
 ACTION_COMMAND_ROWS = {2, 3}
 ACTION_COMMAND_COLS = {"left", "mid", "right"}
 

@@ -38,6 +38,7 @@ class ActionCommandDialog:
         self.on_close = on_close
         self.command_buttons: Dict[Tuple[int, str], tk.Button] = {}
         self.place_button: tk.Button | None = None
+        self.release_button: tk.Button | None = None
         self.status_label: tk.Label | None = None
         self.reset_after_id: str | None = None
         self.window = tk.Toplevel(parent)
@@ -117,8 +118,26 @@ class ActionCommandDialog:
             justify="left",
         ).pack(anchor="w", pady=(14, 0))
 
+        bottom_actions = tk.Frame(left_panel, bg=surface)
+        bottom_actions.pack(fill=tk.X, side=tk.BOTTOM)
+
+        self.release_button = tk.Button(
+            bottom_actions,
+            text="RELEASE",
+            command=self.send_release,
+            bg=self.theme["danger_bg"],
+            fg=text,
+            activebackground=self.theme["danger"],
+            activeforeground=text,
+            relief=tk.FLAT,
+            font=(self.ui_font_family, 22, "bold"),
+            padx=28,
+            pady=22,
+        )
+        self.release_button.pack(fill=tk.X, pady=(0, 12))
+
         self.place_button = tk.Button(
-            left_panel,
+            bottom_actions,
             text="PLACE",
             command=self.send_place,
             bg=self.theme["accent_bg"],
@@ -130,7 +149,7 @@ class ActionCommandDialog:
             padx=30,
             pady=26,
         )
-        self.place_button.pack(fill=tk.X, side=tk.BOTTOM)
+        self.place_button.pack(fill=tk.X)
 
         center_panel = tk.Frame(body, bg=panel, padx=20)
         center_panel.grid(row=0, column=1, sticky="nsew")
@@ -184,15 +203,21 @@ class ActionCommandDialog:
         self.set_button_state(button, "sent", f"{row} {col.upper()}")
 
     def send_place(self) -> None:
+        self.send_simple_action("place", self.place_button, "PLACE")
+
+    def send_release(self) -> None:
+        self.send_simple_action("release", self.release_button, "RELEASE")
+
+    def send_simple_action(self, action: str, button: tk.Button | None, label: str) -> None:
         try:
-            payload = build_action_command_payload("place")
+            payload = build_action_command_payload(action)
             sent = send_action_command_payload(payload, self.local_ip, self.target_ip, self.target_port)
         except Exception as exc:
             print(f"[action-command] send failed: {exc}")
-            self.set_button_state(self.place_button, "failed", "PLACE")
+            self.set_button_state(button, "failed", label)
             return
-        print(f"[action-command] sent place {sent} bytes -> {self.target_ip}:{self.target_port}")
-        self.set_button_state(self.place_button, "sent", "PLACE")
+        print(f"[action-command] sent {action} {sent} bytes -> {self.target_ip}:{self.target_port}")
+        self.set_button_state(button, "sent", label)
 
     def set_button_state(self, button: tk.Button | None, state: str, label: str) -> None:
         if button is None:
@@ -229,6 +254,13 @@ class ActionCommandDialog:
                 text="PLACE",
                 bg=self.theme["accent_bg"],
                 activebackground=self.theme["accent"],
+                fg=self.theme["text"],
+            )
+        if self.release_button is not None:
+            self.release_button.configure(
+                text="RELEASE",
+                bg=self.theme["danger_bg"],
+                activebackground=self.theme["danger"],
                 fg=self.theme["text"],
             )
 
@@ -311,6 +343,9 @@ class ActionCommandDialog:
 
         if self.place_button is not None and self.widget_contains(self.place_button, abs_x, abs_y):
             self.send_place()
+            return True
+        if self.release_button is not None and self.widget_contains(self.release_button, abs_x, abs_y):
+            self.send_release()
             return True
 
         for (row, col), button in self.command_buttons.items():

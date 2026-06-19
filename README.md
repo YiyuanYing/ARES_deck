@@ -209,7 +209,17 @@ B 键动作窗口发送离散动作，不发送整张地图。`2x3` 指令格 pa
 }
 ```
 
-R1 receiver 会校验 `row=2|3`、`col=left|mid|right`，缓存 `latest_action_command`，并打印 `[action]` 结构化日志。ROS2 Action、`team/method` 和 apriltag 通信格式暂时保留为 TODO。
+`RELEASE` / 松开夹爪按钮 payload 示例：
+
+```json
+{
+  "type": "action_command",
+  "action": "release",
+  "timestamp": 1718400000.0
+}
+```
+
+R1 receiver 会校验 `row=2|3`、`col=left|mid|right`，以及 `place/release` 这类独立动作，缓存 `latest_action_command`，并打印 `[action]` 结构化日志。ROS2 Action、`team/method` 和 apriltag 通信格式暂时保留为 TODO。
 
 | Offset | Size | Type | Name | Description |
 |---:|---:|---|---|---|
