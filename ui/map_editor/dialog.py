@@ -86,7 +86,7 @@ class TargetMapEditorDialog:
         self.window.resizable(False, False)
         self.window.withdraw()
 
-        self.status_var = tk.StringVar(value="选择颜色后点击格子")
+        self.status_var = tk.StringVar(value="Select a color, then tap cells")
         self.counter_var = tk.StringVar(value="")
         self.color_hint_var = tk.StringVar(value="")
         self.color_hint_label: tk.Label | None = None
@@ -134,7 +134,7 @@ class TargetMapEditorDialog:
         ).pack(side=tk.LEFT)
         self.cancel_button = tk.Button(
             title_bar,
-            text="临时退出",
+            text="CANCEL",
             command=self.cancel,
             bg=surface,
             fg=muted,
@@ -161,7 +161,7 @@ class TargetMapEditorDialog:
         right_panel.pack(side=tk.RIGHT, fill=tk.Y)
         right_panel.pack_propagate(False)
 
-        tk.Label(left_panel, text="子模式", bg=surface, fg=muted, font=(self.ui_font_family, 20, "bold")).pack(anchor="w")
+        tk.Label(left_panel, text="MISSION MODE", bg=surface, fg=muted, font=(self.ui_font_family, 18, "bold")).pack(anchor="w")
         self.mode_box = tk.Button(
             left_panel,
             text=self.selected_mode.get(),
@@ -179,7 +179,7 @@ class TargetMapEditorDialog:
         )
         self.mode_box.pack(fill=tk.X, pady=(12, 30))
 
-        tk.Label(left_panel, text="选择颜色", bg=surface, fg=muted, font=(self.ui_font_family, 20, "bold")).pack(anchor="w", pady=(0, 14))
+        tk.Label(left_panel, text="BLOCK COLOR", bg=surface, fg=muted, font=(self.ui_font_family, 18, "bold")).pack(anchor="w", pady=(0, 14))
 
         for value, label, color in (
             (GRAY, "GRAY", CELL_COLORS[GRAY]),
@@ -210,7 +210,7 @@ class TargetMapEditorDialog:
 
         tk.Label(
             left_panel,
-            text="点击子模式框可循环切换",
+            text="Tap mission mode to cycle",
             bg=surface,
             fg=muted,
             font=(self.ui_font_family, 12),
@@ -252,7 +252,7 @@ class TargetMapEditorDialog:
         )
         self.color_hint_label.pack(fill=tk.X, pady=(0, 18))
 
-        tk.Label(right_panel, text="数量上限", bg=surface, fg=muted, font=(self.ui_font_family, 16, "bold")).pack(anchor="w")
+        tk.Label(right_panel, text="LIMITS", bg=surface, fg=muted, font=(self.ui_font_family, 16, "bold")).pack(anchor="w")
         tk.Label(right_panel, textvariable=self.counter_var, bg=surface, fg=text, font=(self.mono_font_family, 15, "bold"), justify="left").pack(
             fill=tk.X, pady=(10, 22)
         )
@@ -270,7 +270,7 @@ class TargetMapEditorDialog:
         footer.pack(fill=tk.X, side=tk.BOTTOM)
         self.clear_button = tk.Button(
             footer,
-            text="清空",
+            text="CLEAR",
             command=self.clear,
             bg=self.theme["warn_bg"],
             fg=text,
@@ -284,7 +284,7 @@ class TargetMapEditorDialog:
         self.clear_button.pack(fill=tk.X, pady=(0, 12))
         self.send_button = tk.Button(
             footer,
-            text="发送地图",
+            text="SEND MAP",
             command=self.send,
             bg=self.theme["accent_bg"],
             fg=text,
@@ -309,7 +309,7 @@ class TargetMapEditorDialog:
 
     def select_color(self, value: int) -> None:
         self.selected_color.set(value)
-        self.status_var.set(f"当前颜色: {COLOR_NAMES[value]}")
+        self.status_var.set(f"Current color: {COLOR_NAMES[value]}")
         self.refresh()
 
     def set_cell(self, row: int, col: int) -> None:
@@ -327,12 +327,12 @@ class TargetMapEditorDialog:
             return
 
         self.edit_grid = candidate
-        self.status_var.set("地图已更新")
+        self.status_var.set("Map updated")
         self.refresh()
 
     def clear(self) -> None:
         self.edit_grid = empty_edit_grid()
-        self.status_var.set("地图已清空")
+        self.status_var.set("Map cleared")
         self.refresh()
 
     def send(self) -> None:
@@ -342,10 +342,10 @@ class TargetMapEditorDialog:
             payload = build_target_map_payload(self.current_mode().name, full_grid)
             sent = send_target_map_payload(payload, self.local_ip, self.target_ip, self.target_port)
         except Exception as exc:
-            self.status_var.set(f"发送失败: {exc}")
+            self.status_var.set(f"Send failed: {exc}")
             return
 
-        self.status_var.set(f"已发送 {sent} bytes -> {self.target_ip}:{self.target_port}")
+        self.status_var.set(f"Sent {sent} bytes -> {self.target_ip}:{self.target_port}")
 
     def refresh(self) -> None:
         counts = count_cells(self.edit_grid)
@@ -375,7 +375,7 @@ class TargetMapEditorDialog:
             active = value == selected_color
             base_color = CELL_COLORS[value]
             button.configure(
-                text=f"{COLOR_NAMES[value]}  ● 当前" if active else COLOR_NAMES[value],
+                text=f"{COLOR_NAMES[value]}  ● ACTIVE" if active else COLOR_NAMES[value],
                 bg=CELL_ACTIVE_COLORS.get(value, base_color) if active else self.theme["surface"],
                 activebackground=CELL_ACTIVE_COLORS.get(value, base_color),
                 highlightbackground=self.theme["active_glow"] if active else base_color,
@@ -439,7 +439,7 @@ class TargetMapEditorDialog:
         current = self.selected_mode.get()
         index = self.mode_names.index(current) if current in self.mode_names else 0
         self.selected_mode.set(self.mode_names[(index + 1) % len(self.mode_names)])
-        self.status_var.set(f"模式: {self.selected_mode.get()}")
+        self.status_var.set(f"Mode: {self.selected_mode.get()}")
         self.refresh()
 
     @staticmethod

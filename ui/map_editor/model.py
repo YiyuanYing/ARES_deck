@@ -17,7 +17,7 @@ RED = 2
 GRAY = 3
 
 COLOR_NAMES = {
-    EMPTY: "空",
+    EMPTY: "EMPTY",
     BLUE: "BLUE",
     RED: "RED",
     GRAY: "GRAY",
@@ -89,7 +89,7 @@ def validate_edit_grid(edit_grid: List[List[int]], mode: MapMode) -> None:
     counts = count_cells(edit_grid)
     for value in (RED, BLUE, GRAY):
         if counts.get(value, 0) > mode.limit_for(value):
-            raise ValueError(f"{COLOR_NAMES[value]}色块超过上限")
+            raise ValueError(f"{COLOR_NAMES[value]} limit exceeded")
 
 
 def build_full_grid(edit_grid: List[List[int]]) -> List[List[int]]:
