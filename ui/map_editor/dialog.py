@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import time
 import tkinter as tk
+import tkinter.font as tkfont
 from tkinter import ttk
 from typing import Callable, Dict, List
 
@@ -31,6 +32,12 @@ CELL_COLORS = {
     BLUE: "#348cff",
     RED: "#ff4264",
     GRAY: "#888991",
+}
+
+CELL_ACTIVE_COLORS = {
+    BLUE: "#63a8ff",
+    RED: "#ff6f86",
+    GRAY: "#b7b8c0",
 }
 
 CELL_TEXT = {
@@ -90,6 +97,7 @@ class TargetMapEditorDialog:
         self.target_y = 0
         self.target_width = 640
         self.target_height = 700
+        self.combo_font = tkfont.Font(family="DejaVu Sans", size=18, weight="bold")
 
         self.build_ui()
         self.refresh()
@@ -152,12 +160,17 @@ class TargetMapEditorDialog:
         right_panel.pack(side=tk.RIGHT, fill=tk.Y)
         right_panel.pack_propagate(False)
 
-        tk.Label(left_panel, text="子模式", bg=surface, fg=muted, font=("DejaVu Sans", 16, "bold")).pack(anchor="w")
+        style = ttk.Style(self.window)
+        style.configure("MapEditor.TCombobox", font=self.combo_font)
+        self.window.option_add("*TCombobox*Listbox*Font", self.combo_font)
+
+        tk.Label(left_panel, text="子模式", bg=surface, fg=muted, font=("DejaVu Sans", 20, "bold")).pack(anchor="w")
         self.mode_box = ttk.Combobox(left_panel, values=self.mode_names, textvariable=self.selected_mode, state="readonly", width=18)
-        self.mode_box.pack(fill=tk.X, pady=(10, 26), ipady=12)
+        self.mode_box.configure(font=self.combo_font, style="MapEditor.TCombobox")
+        self.mode_box.pack(fill=tk.X, pady=(12, 30), ipady=16)
         self.mode_box.bind("<<ComboboxSelected>>", lambda _event: self.refresh())
 
-        tk.Label(left_panel, text="选择颜色", bg=surface, fg=muted, font=("DejaVu Sans", 16, "bold")).pack(anchor="w", pady=(0, 12))
+        tk.Label(left_panel, text="选择颜色", bg=surface, fg=muted, font=("DejaVu Sans", 20, "bold")).pack(anchor="w", pady=(0, 14))
 
         for value, label, color in (
             (GRAY, "灰", CELL_COLORS[GRAY]),
@@ -175,6 +188,7 @@ class TargetMapEditorDialog:
                 activebackground=surface,
                 activeforeground=text,
                 indicatoron=False,
+                font=("DejaVu Sans", 22, "bold"),
                 padx=18,
                 pady=18,
                 relief=tk.FLAT,
@@ -195,7 +209,7 @@ class TargetMapEditorDialog:
             justify="left",
         ).pack(anchor="w", side=tk.BOTTOM)
 
-        tk.Label(center_panel, text="EXIT  ↑", bg=panel, fg=self.theme["accent"], font=("DejaVu Sans", 18, "bold")).pack(pady=(0, 8))
+        tk.Label(center_panel, text="EXIT  ↑", bg=panel, fg=self.theme["accent"], font=("DejaVu Sans", 17, "bold")).pack(pady=(0, 6))
 
         grid_frame = tk.Frame(center_panel, bg=panel)
         grid_frame.pack(expand=True)
@@ -206,17 +220,17 @@ class TargetMapEditorDialog:
                     grid_frame,
                     text="",
                     command=lambda r=row, c=col: self.set_cell(r, c),
-                    width=8,
+                    width=7,
                     height=2,
                     relief=tk.FLAT,
                     bd=0,
-                    font=("DejaVu Sans", 34, "bold"),
+                    font=("DejaVu Sans", 28, "bold"),
                 )
-                button.grid(row=row, column=col, padx=14, pady=9, ipadx=40, ipady=18)
+                button.grid(row=row, column=col, padx=12, pady=7, ipadx=28, ipady=12)
                 button_row.append(button)
             self.cell_buttons.append(button_row)
 
-        tk.Label(center_panel, text="ENTRANCE  ↓", bg=panel, fg=self.theme["ok"], font=("DejaVu Sans", 18, "bold")).pack(pady=(8, 0))
+        tk.Label(center_panel, text="ENTRANCE  ↓", bg=panel, fg=self.theme["ok"], font=("DejaVu Sans", 17, "bold")).pack(pady=(6, 0))
 
         self.color_hint_label = tk.Label(
             right_panel,
@@ -336,6 +350,18 @@ class TargetMapEditorDialog:
                     activebackground=CELL_COLORS[value],
                     activeforeground=self.theme["text"],
                 )
+        selected_color = int(self.selected_color.get())
+        for value, button in self.color_buttons.items():
+            active = value == selected_color
+            base_color = CELL_COLORS[value]
+            button.configure(
+                text=f"{COLOR_NAMES[value]}  ● 当前" if active else COLOR_NAMES[value],
+                bg=CELL_ACTIVE_COLORS.get(value, base_color) if active else self.theme["surface"],
+                activebackground=CELL_ACTIVE_COLORS.get(value, base_color),
+                highlightbackground=self.theme["active_glow"] if active else base_color,
+                highlightcolor=self.theme["active_glow"] if active else base_color,
+                fg=self.theme["active_text"] if active else self.theme["text"],
+            )
 
     def center_window(self) -> None:
         self.window.update_idletasks()
