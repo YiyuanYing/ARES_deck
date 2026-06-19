@@ -253,6 +253,15 @@ class ControllerPanel:
         self.release_active_touch_target()
 
     def handle_canvas_touch_xy(self, screen_x: float, screen_y: float, source: str = "touch") -> None:
+        if self.map_editor_dialog is not None:
+            try:
+                if self.map_editor_dialog.handle_screen_touch(screen_x, screen_y):
+                    if self.debug_touch:
+                        print(f"[touch] {source} hit map editor at ({screen_x:.1f},{screen_y:.1f})")
+                    return
+            except tk.TclError:
+                self.map_editor_dialog = None
+
         sx, sy, _s = self.scale()
         base_x = screen_x / sx
         base_y = screen_y / sy

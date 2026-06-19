@@ -64,6 +64,11 @@ class TargetMapEditorDialog:
         self.selected_color = tk.IntVar(value=RED)
         self.edit_grid = empty_edit_grid()
         self.cell_buttons: List[List[tk.Button]] = []
+        self.color_buttons: Dict[int, tk.Radiobutton] = {}
+        self.mode_box: ttk.Combobox | None = None
+        self.clear_button: tk.Button | None = None
+        self.send_button: tk.Button | None = None
+        self.cancel_button: tk.Button | None = None
         self.window = tk.Toplevel(parent)
         self.window.title("Target Map Editor")
         self.window.configure(bg=self.theme["bg"])
@@ -103,9 +108,9 @@ class TargetMapEditorDialog:
             text="TARGET MAP",
             bg=panel,
             fg=text,
-            font=("DejaVu Sans", 15, "bold"),
+            font=("DejaVu Sans", 18, "bold"),
         ).pack(side=tk.LEFT)
-        tk.Button(
+        self.cancel_button = tk.Button(
             title_bar,
             text="临时退出",
             command=self.cancel,
@@ -115,22 +120,23 @@ class TargetMapEditorDialog:
             activeforeground=text,
             relief=tk.FLAT,
             padx=12,
-            pady=4,
-        ).pack(side=tk.RIGHT)
+            pady=7,
+        )
+        self.cancel_button.pack(side=tk.RIGHT)
 
-        control = tk.Frame(card, bg=panel, pady=12)
+        control = tk.Frame(card, bg=panel, pady=16)
         control.pack(fill=tk.X)
-        tk.Label(control, text="子模式", bg=panel, fg=muted, font=("DejaVu Sans", 10, "bold")).pack(side=tk.LEFT)
-        mode_box = ttk.Combobox(control, values=self.mode_names, textvariable=self.selected_mode, state="readonly", width=14)
-        mode_box.pack(side=tk.LEFT, padx=(8, 18))
-        mode_box.bind("<<ComboboxSelected>>", lambda _event: self.refresh())
+        tk.Label(control, text="子模式", bg=panel, fg=muted, font=("DejaVu Sans", 12, "bold")).pack(side=tk.LEFT)
+        self.mode_box = ttk.Combobox(control, values=self.mode_names, textvariable=self.selected_mode, state="readonly", width=14)
+        self.mode_box.pack(side=tk.LEFT, padx=(10, 24), ipady=5)
+        self.mode_box.bind("<<ComboboxSelected>>", lambda _event: self.refresh())
 
         for value, label, color in (
             (GRAY, "灰", CELL_COLORS[GRAY]),
             (BLUE, "蓝", CELL_COLORS[BLUE]),
             (RED, "红", CELL_COLORS[RED]),
         ):
-            tk.Radiobutton(
+            button = tk.Radiobutton(
                 control,
                 text=label,
                 value=value,
@@ -141,15 +147,17 @@ class TargetMapEditorDialog:
                 activebackground=panel,
                 activeforeground=text,
                 indicatoron=False,
-                width=5,
-                padx=4,
-                pady=5,
+                width=6,
+                padx=7,
+                pady=8,
                 relief=tk.FLAT,
                 highlightthickness=2,
                 highlightbackground=color,
-            ).pack(side=tk.LEFT, padx=4)
+            )
+            button.pack(side=tk.LEFT, padx=5)
+            self.color_buttons[value] = button
 
-        tk.Label(card, text="EXIT  ↑", bg=panel, fg=self.theme["accent"], font=("DejaVu Sans", 12, "bold")).pack(pady=(4, 6))
+        tk.Label(card, text="EXIT  ↑", bg=panel, fg=self.theme["accent"], font=("DejaVu Sans", 15, "bold")).pack(pady=(4, 8))
 
         grid_frame = tk.Frame(card, bg=panel)
         grid_frame.pack()
@@ -161,23 +169,23 @@ class TargetMapEditorDialog:
                     text="",
                     command=lambda r=row, c=col: self.set_cell(r, c),
                     width=8,
-                    height=3,
+                    height=4,
                     relief=tk.FLAT,
                     bd=0,
-                    font=("DejaVu Sans", 15, "bold"),
+                    font=("DejaVu Sans", 22, "bold"),
                 )
-                button.grid(row=row, column=col, padx=7, pady=7)
+                button.grid(row=row, column=col, padx=10, pady=10, ipadx=16, ipady=8)
                 button_row.append(button)
             self.cell_buttons.append(button_row)
 
-        tk.Label(card, text="ENTRANCE  ↓", bg=panel, fg=self.theme["ok"], font=("DejaVu Sans", 12, "bold")).pack(pady=(6, 8))
+        tk.Label(card, text="ENTRANCE  ↓", bg=panel, fg=self.theme["ok"], font=("DejaVu Sans", 15, "bold")).pack(pady=(8, 10))
 
-        tk.Label(card, textvariable=self.counter_var, bg=panel, fg=muted, font=("DejaVu Sans Mono", 10)).pack()
-        tk.Label(card, textvariable=self.status_var, bg=panel, fg=self.theme["warning"], font=("DejaVu Sans", 10)).pack(pady=(4, 10))
+        tk.Label(card, textvariable=self.counter_var, bg=panel, fg=muted, font=("DejaVu Sans Mono", 12)).pack()
+        tk.Label(card, textvariable=self.status_var, bg=panel, fg=self.theme["warning"], font=("DejaVu Sans", 11)).pack(pady=(6, 12))
 
         footer = tk.Frame(card, bg=panel)
         footer.pack(fill=tk.X)
-        tk.Button(
+        self.clear_button = tk.Button(
             footer,
             text="清空",
             command=self.clear,
@@ -187,9 +195,10 @@ class TargetMapEditorDialog:
             activeforeground=text,
             relief=tk.FLAT,
             padx=18,
-            pady=8,
-        ).pack(side=tk.LEFT)
-        tk.Button(
+            pady=11,
+        )
+        self.clear_button.pack(side=tk.LEFT)
+        self.send_button = tk.Button(
             footer,
             text="发送地图",
             command=self.send,
@@ -199,8 +208,9 @@ class TargetMapEditorDialog:
             activeforeground=text,
             relief=tk.FLAT,
             padx=22,
-            pady=8,
-        ).pack(side=tk.RIGHT)
+            pady=11,
+        )
+        self.send_button.pack(side=tk.RIGHT)
 
     def current_mode(self) -> MapMode:
         return self.modes[self.selected_mode.get()]
@@ -260,8 +270,8 @@ class TargetMapEditorDialog:
 
     def center_window(self) -> None:
         self.window.update_idletasks()
-        width = 520
-        height = 610
+        width = 680
+        height = 750
         parent_x = self.parent.winfo_rootx()
         parent_y = self.parent.winfo_rooty()
         parent_w = max(self.parent.winfo_width(), 1)
@@ -269,6 +279,57 @@ class TargetMapEditorDialog:
         x = parent_x + (parent_w - width) // 2
         y = parent_y + (parent_h - height) // 2
         self.window.geometry(f"{width}x{height}+{x}+{y}")
+
+    def handle_screen_touch(self, screen_x: float, screen_y: float) -> bool:
+        if not self.window.winfo_exists():
+            return False
+        abs_x = self.parent.winfo_rootx() + int(screen_x)
+        abs_y = self.parent.winfo_rooty() + int(screen_y)
+
+        if self.cancel_button is not None and self.widget_contains(self.cancel_button, abs_x, abs_y):
+            self.cancel()
+            return True
+        if self.clear_button is not None and self.widget_contains(self.clear_button, abs_x, abs_y):
+            self.clear()
+            return True
+        if self.send_button is not None and self.widget_contains(self.send_button, abs_x, abs_y):
+            self.send()
+            return True
+        if self.mode_box is not None and self.widget_contains(self.mode_box, abs_x, abs_y):
+            self.cycle_mode()
+            return True
+
+        for value, button in self.color_buttons.items():
+            if self.widget_contains(button, abs_x, abs_y):
+                self.selected_color.set(value)
+                self.status_var.set(f"当前颜色: {COLOR_NAMES[value]}")
+                return True
+
+        for row in range(EDIT_HEIGHT):
+            for col in range(EDIT_WIDTH):
+                button = self.cell_buttons[row][col]
+                if self.widget_contains(button, abs_x, abs_y):
+                    self.set_cell(row, col)
+                    return True
+        return self.widget_contains(self.window, abs_x, abs_y)
+
+    def cycle_mode(self) -> None:
+        current = self.selected_mode.get()
+        index = self.mode_names.index(current) if current in self.mode_names else 0
+        self.selected_mode.set(self.mode_names[(index + 1) % len(self.mode_names)])
+        self.status_var.set(f"模式: {self.selected_mode.get()}")
+        self.refresh()
+
+    @staticmethod
+    def widget_contains(widget: tk.Widget, abs_x: int, abs_y: int) -> bool:
+        try:
+            x1 = widget.winfo_rootx()
+            y1 = widget.winfo_rooty()
+            x2 = x1 + widget.winfo_width()
+            y2 = y1 + widget.winfo_height()
+        except tk.TclError:
+            return False
+        return x1 <= abs_x <= x2 and y1 <= abs_y <= y2
 
     def animate_in(self) -> None:
         try:
