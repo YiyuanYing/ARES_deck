@@ -73,11 +73,14 @@ class TargetMapEditorDialog:
         self.window.title("Target Map Editor")
         self.window.configure(bg=self.theme["bg"])
         self.window.transient(parent)
+        self.window.overrideredirect(True)
         self.window.protocol("WM_DELETE_WINDOW", self.cancel)
         self.window.resizable(False, False)
 
         self.status_var = tk.StringVar(value="选择颜色后点击格子")
         self.counter_var = tk.StringVar(value="")
+        self.drag_offset_x = 0
+        self.drag_offset_y = 0
 
         self.build_ui()
         self.refresh()
@@ -99,6 +102,8 @@ class TargetMapEditorDialog:
 
         title_bar = tk.Frame(card, bg=panel)
         title_bar.pack(fill=tk.X)
+        title_bar.bind("<ButtonPress-1>", self.begin_drag)
+        title_bar.bind("<B1-Motion>", self.drag_window)
         dots = tk.Frame(title_bar, bg=panel)
         dots.pack(side=tk.LEFT, padx=(0, 12))
         for color in ("#ff5f57", "#ffbd2e", "#28c840"):
@@ -274,7 +279,7 @@ class TargetMapEditorDialog:
         parent_y = self.parent.winfo_rooty()
         parent_w = max(self.parent.winfo_width(), 1)
         parent_h = max(self.parent.winfo_height(), 1)
-        width = min(640, max(parent_w - 80, 520))
+        width = min(720, max(parent_w - 80, 560))
         height = min(700, max(parent_h - 80, 560))
         x = parent_x + (parent_w - width) // 2
         y = parent_y + (parent_h - height) // 2
@@ -350,6 +355,15 @@ class TargetMapEditorDialog:
                 self.window.after(12, step)
 
         step()
+
+    def begin_drag(self, event: tk.Event) -> None:
+        self.drag_offset_x = int(event.x_root - self.window.winfo_x())
+        self.drag_offset_y = int(event.y_root - self.window.winfo_y())
+
+    def drag_window(self, event: tk.Event) -> None:
+        x = int(event.x_root - self.drag_offset_x)
+        y = int(event.y_root - self.drag_offset_y)
+        self.window.geometry(f"+{x}+{y}")
 
     def cancel(self) -> None:
         if self.on_close is not None:
