@@ -21,8 +21,8 @@ DEFAULT_UDP_PORT = TARGET_PORT
 DEFAULT_MAP_MESSAGE_PORT = MAP_MESSAGE_PORT
 UDP_SEND_HZ = SEND_HZ
 RESET_PULSE_SECONDS = 0.25
-MAP_EDITOR_TRIGGER_BUTTON_ID = 3  # A 键：按下会打开目标地图编辑器。
-ACTION_COMMAND_TRIGGER_BUTTON_ID = 4  # B 键：按下会打开动作指令窗口。
+MAP_EDITOR_TRIGGER_BUTTON_ID = 13  # Steam 键：按下会打开目标地图编辑器。
+ACTION_COMMAND_TRIGGER_BUTTON_ID = 2  # 快捷菜单键 / ...：按下会打开动作指令窗口。
 
 UI_COLOR_THEME = "burgundy"  # 可选: "burgundy" 酒红色, "midnight_blue" 墨蓝色
 UI_COLOR_THEMES = {
@@ -269,9 +269,9 @@ DISPLAY_BUTTON_MAP = {
 # Change individual entries to "momentary" when you want press-and-hold behavior.
 # Entries here are merged into outgoing UDP button states by ControllerPanel.
 PHYSICAL_BUTTON_MODE_MAP = {
-    2: DEFAULT_BUTTON_ACTIVATION_MODE,  # 快捷菜单键 / ...
-    3: "momentary",  # A 键：按住有效；地图编辑器打开时再次按下会临时退出
-    4: "momentary",  # B 键：按住有效；动作指令窗口打开时再次按下会临时退出
+    2: "momentary",  # 快捷菜单键 / ...：按住有效；动作指令窗口打开时再次按下会临时退出
+    3: DEFAULT_BUTTON_ACTIVATION_MODE,  # A 键
+    4: DEFAULT_BUTTON_ACTIVATION_MODE,  # B 键
     5: DEFAULT_BUTTON_ACTIVATION_MODE,  # X 键
     6: DEFAULT_BUTTON_ACTIVATION_MODE,  # Y 键
     7: DEFAULT_BUTTON_ACTIVATION_MODE,  # 左肩键 LB
@@ -280,7 +280,7 @@ PHYSICAL_BUTTON_MODE_MAP = {
     10: DEFAULT_BUTTON_ACTIVATION_MODE,  # 右扳机全按 RT
     11: DEFAULT_BUTTON_ACTIVATION_MODE,  # View / Select 键
     12: DEFAULT_BUTTON_ACTIVATION_MODE,  # Menu / Start 键
-    13: DEFAULT_BUTTON_ACTIVATION_MODE,  # Steam 键
+    13: "momentary",  # Steam 键：按住有效；地图编辑器打开时再次按下会临时退出
     14: DEFAULT_BUTTON_ACTIVATION_MODE,  # 左摇杆按下 L3
     15: DEFAULT_BUTTON_ACTIVATION_MODE,  # 右摇杆按下 R3
     16: DEFAULT_BUTTON_ACTIVATION_MODE,  # 十字键上
