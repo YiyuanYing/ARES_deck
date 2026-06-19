@@ -635,7 +635,7 @@ class ControllerPanel:
         # through those blocks instead of trailing outside the text.
         pixel = 4
         gap = 1
-        char_gap = 3
+        char_gap = 4
         char_width = 5 * pixel + 4 * gap + char_gap
         top = y - 18
         phase = time.monotonic() * 6.0
@@ -693,11 +693,11 @@ class ControllerPanel:
         )
 
     def draw_edge_guides(self) -> None:
-        self.rounded_rect(28, 150, 132, 686, 8, fill=SURFACE, outline=LINE, width=2)
-        self.rounded_rect(1148, 150, 1252, 686, 8, fill=SURFACE, outline=LINE, width=2)
-        self.rounded_rect(158, 162, 1122, 590, 8, fill=PANEL_FIELD, outline=LINE, width=2)
+        self.rounded_rect(24, 150, 148, 686, 8, fill=SURFACE, outline=LINE, width=2)
+        self.rounded_rect(1132, 150, 1256, 686, 8, fill=SURFACE, outline=LINE, width=2)
+        self.rounded_rect(162, 162, 1118, 586, 8, fill=PANEL_FIELD, outline=LINE, width=2)
         self.canvas.create_text(
-            self.x(176),
+            self.x(182),
             self.y(174),
             text="TOUCH ACTIONS",
             fill=MUTED,
