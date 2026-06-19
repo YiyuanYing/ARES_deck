@@ -26,14 +26,13 @@ from ui.map_editor.model import (
 )
 
 
-CELL_COLORS = {
-    EMPTY: "#22151d",
+BLOCK_COLORS = {
     BLUE: "#348cff",
     RED: "#ff4264",
     GRAY: "#888991",
 }
 
-CELL_ACTIVE_COLORS = {
+BLOCK_ACTIVE_COLORS = {
     BLUE: "#63a8ff",
     RED: "#ff6f86",
     GRAY: "#b7b8c0",
@@ -190,9 +189,9 @@ class TargetMapEditorDialog:
         tk.Label(left_panel, text="BLOCK COLOR", bg=surface, fg=muted, font=(self.ui_font_family, 18, "bold")).pack(anchor="w", pady=(0, 14))
 
         for value, label, color in (
-            (GRAY, "GRAY", CELL_COLORS[GRAY]),
-            (BLUE, "BLUE", CELL_COLORS[BLUE]),
-            (RED, "RED", CELL_COLORS[RED]),
+            (GRAY, "GRAY", self.cell_color(GRAY)),
+            (BLUE, "BLUE", self.cell_color(BLUE)),
+            (RED, "RED", self.cell_color(RED)),
         ):
             button = tk.Button(
                 left_panel,
@@ -278,6 +277,16 @@ class TargetMapEditorDialog:
         self.selected_color.set(value)
         self.refresh()
 
+    def cell_color(self, value: int) -> str:
+        if value == EMPTY:
+            return self.theme["panel_field"]
+        return BLOCK_COLORS[value]
+
+    def cell_active_color(self, value: int) -> str:
+        if value == EMPTY:
+            return self.theme["surface_alt"]
+        return BLOCK_ACTIVE_COLORS.get(value, self.cell_color(value))
+
     def set_cell(self, row: int, col: int) -> None:
         previous = self.edit_grid[row][col]
         next_value = int(self.selected_color.get())
@@ -321,23 +330,25 @@ class TargetMapEditorDialog:
             for col in range(EDIT_WIDTH):
                 value = int(self.edit_grid[row][col])
                 button = self.cell_buttons[row][col]
+                color = self.cell_color(value)
                 button.configure(
                     text=CELL_TEXT[value],
-                    bg=CELL_COLORS[value],
+                    bg=color,
                     fg=self.theme["text"],
-                    activebackground=CELL_COLORS[value],
+                    activebackground=color,
                     activeforeground=self.theme["text"],
                 )
         selected_color = int(self.selected_color.get())
         for value, button in self.color_buttons.items():
             active = value == selected_color
-            base_color = CELL_COLORS[value]
+            base_color = self.cell_color(value)
+            active_color = self.cell_active_color(value)
             button.configure(
                 text=COLOR_NAMES[value],
-                bg=CELL_ACTIVE_COLORS.get(value, base_color) if active else self.theme["panel_field"],
-                activebackground=CELL_ACTIVE_COLORS.get(value, base_color),
-                highlightbackground=CELL_ACTIVE_COLORS.get(value, base_color) if active else base_color,
-                highlightcolor=CELL_ACTIVE_COLORS.get(value, base_color) if active else base_color,
+                bg=active_color if active else self.theme["panel_field"],
+                activebackground=active_color,
+                highlightbackground=active_color if active else base_color,
+                highlightcolor=active_color if active else base_color,
                 fg=self.theme["active_text"] if active else self.theme["text"],
             )
 
