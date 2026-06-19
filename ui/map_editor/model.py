@@ -18,9 +18,9 @@ GRAY = 3
 
 COLOR_NAMES = {
     EMPTY: "空",
-    BLUE: "蓝",
-    RED: "红",
-    GRAY: "灰",
+    BLUE: "BLUE",
+    RED: "RED",
+    GRAY: "GRAY",
 }
 
 COLOR_KEYS = {

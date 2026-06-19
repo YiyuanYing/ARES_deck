@@ -182,9 +182,9 @@ class TargetMapEditorDialog:
         tk.Label(left_panel, text="选择颜色", bg=surface, fg=muted, font=(self.ui_font_family, 20, "bold")).pack(anchor="w", pady=(0, 14))
 
         for value, label, color in (
-            (GRAY, "灰", CELL_COLORS[GRAY]),
-            (BLUE, "蓝", CELL_COLORS[BLUE]),
-            (RED, "红", CELL_COLORS[RED]),
+            (GRAY, "GRAY", CELL_COLORS[GRAY]),
+            (BLUE, "BLUE", CELL_COLORS[BLUE]),
+            (RED, "RED", CELL_COLORS[RED]),
         ):
             button = tk.Radiobutton(
                 left_panel,
@@ -351,13 +351,13 @@ class TargetMapEditorDialog:
         counts = count_cells(self.edit_grid)
         mode = self.current_mode()
         selected = int(self.selected_color.get())
-        self.color_hint_var.set(f"当前颜色：{COLOR_NAMES[selected]}")
+        self.color_hint_var.set(f"CURRENT COLOR: {COLOR_NAMES[selected]}")
         if self.color_hint_label is not None:
             self.color_hint_label.configure(bg=CELL_COLORS[selected])
         if self.mode_box is not None:
             self.mode_box.configure(text=self.selected_mode.get())
         self.counter_var.set(
-            f"红 {counts[RED]}/{mode.red_max}   蓝 {counts[BLUE]}/{mode.blue_max}   灰 {counts[GRAY]}/{mode.gray_max}"
+            f"RED  {counts[RED]}/{mode.red_max}\nBLUE {counts[BLUE]}/{mode.blue_max}\nGRAY {counts[GRAY]}/{mode.gray_max}"
         )
         for row in range(EDIT_HEIGHT):
             for col in range(EDIT_WIDTH):
