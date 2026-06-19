@@ -267,11 +267,19 @@ class ActionCommandDialog:
     def refresh_status_label(self) -> None:
         if self.status_label is not None and self.status_provider is not None:
             try:
-                self.status_label.configure(text=self.status_provider())
+                status_text = self.status_provider()
+                self.status_label.configure(text=status_text, fg=self.host_status_color(status_text))
             except Exception as exc:
-                self.status_label.configure(text=f"HOST status unavailable: {exc}")
+                self.status_label.configure(text=f"HOST status unavailable: {exc}", fg=self.theme["danger"])
         if self.window.winfo_exists():
             self.window.after(500, self.refresh_status_label)
+
+    def host_status_color(self, status_text: str) -> str:
+        if "HOST connected" in status_text:
+            return self.theme.get("host_connected", "#32ff75")
+        if "HOST checking" in status_text:
+            return self.theme["warning"]
+        return self.theme["danger"]
 
     def center_window(self) -> None:
         self.window.update_idletasks()

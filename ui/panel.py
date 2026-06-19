@@ -49,6 +49,7 @@ TEXT = THEME["text"]
 MUTED = THEME["muted"]
 GREEN = THEME["ok"]
 GREEN_DARK = THEME["ok_dark"]
+HOST_CONNECTED = THEME.get("host_connected", "#32ff75")
 ACTIVE_GLOW = THEME["active_glow"]
 ACTIVE_TEXT = THEME["active_text"]
 YELLOW = THEME["warning"]
@@ -558,6 +559,7 @@ class ControllerPanel:
                 expired_virtual_buttons.append(button_id)
         for button_id in expired_virtual_buttons:
             self.virtual_button_until.pop(button_id, None)
+        self.suppress_ui_trigger_buttons(buttons)
 
         return {
             "axes": {
@@ -570,6 +572,13 @@ class ControllerPanel:
             "enable": True,
             "estop": False,
         }
+
+    def suppress_ui_trigger_buttons(self, buttons: Dict[int, bool]) -> None:
+        # Steam is treated as ESTOP by ControllerFrame V2. UI-only trigger keys
+        # must not leak into the real-time control bitmask.
+        for button_id in (MAP_EDITOR_TRIGGER_BUTTON_ID, ACTION_COMMAND_TRIGGER_BUTTON_ID):
+            if button_id is not None:
+                buttons[int(button_id)] = False
 
     def process_events(self) -> None:
         while True:
@@ -737,7 +746,7 @@ class ControllerPanel:
         host_reachable, host_checked_at = self.host_monitor.snapshot()
         host_fresh = host_checked_at > 0.0 and time.monotonic() - host_checked_at <= 2.5
         host_ok = host_reachable and host_fresh
-        host_color = GREEN if host_ok else RED
+        host_color = HOST_CONNECTED if host_ok else RED
         if host_ok:
             host_text = f"HOST connected -> {metrics.target_ip}:{metrics.target_port}"
         elif not host_fresh:
