@@ -34,7 +34,9 @@ ros_udp_receiver:
   publish_hz: 100.0
   controller_topic: "/controller"
   tx_id_topic: "/aruco_comm/tx_id"
+  tx_id_zero_frames: 3
+  tx_id_value_frames: 1
   debug_log: true
   debug_log_hz: 10.0
   debug_log_format: "block"
-  button_to_tx_id: "{}"
+  button_to_tx_id: '{"ACTION_SELECT_3_LEFT": 1, "ACTION_SELECT_3_MID": 2, "ACTION_SELECT_3_RIGHT": 3, "ACTION_SELECT_2_LEFT": 4, "ACTION_SELECT_2_MID": 5, "ACTION_SELECT_2_RIGHT": 6, "ACTION_PLACE": 7}'

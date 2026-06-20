@@ -121,6 +121,7 @@ ROS2 接收端会发布：
   - `buttons` 使用协议 button ID 作为数组索引，例如 `buttons[3]` 是 `A`，`buttons[32]` 是 `VIRTUAL_BUTTON_1`。
   - 实体键区间是 `2-23`，触屏虚拟键区间是 `32-39`。
 - `/aruco_comm/tx_id` (`std_msgs/msg/Int32`): 预留给按键到 ArUco tx id 的上升沿映射，默认不绑定任何键。
+  - 触发后会先发布 3 帧 `0`，再发布 1 帧目标整数；多个触发会排队发送。
 
 UI / 安全保留键不会被 `button_to_tx_id` 用作业务映射：
 

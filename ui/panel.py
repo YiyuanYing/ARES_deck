@@ -730,6 +730,7 @@ class ControllerPanel:
             self.draw_button(button_id, spec)
 
         self.draw_footer()
+        self.draw_estop_warning_frame()
 
     def update_animation_clock(self) -> None:
         now = time.monotonic()
@@ -899,6 +900,17 @@ class ControllerPanel:
             fill=ACTIVE_TEXT,
             font=("DejaVu Sans", 15, "bold"),
         )
+
+    def draw_estop_warning_frame(self) -> None:
+        if not self.is_estop_active():
+            return
+        width = max(self.canvas.winfo_width(), 1)
+        height = max(self.canvas.winfo_height(), 1)
+        pulse = 0.5 + 0.5 * math.sin(time.monotonic() * 8.0)
+        outer = blend_color(YELLOW, ACTIVE_GLOW, pulse * 0.35)
+        inner = blend_color(YELLOW, RED, pulse * 0.18)
+        self.canvas.create_rectangle(5, 5, width - 5, height - 5, fill="", outline=outer, width=8)
+        self.canvas.create_rectangle(18, 18, width - 18, height - 18, fill="", outline=inner, width=3)
 
     def draw_edge_guides(self) -> None:
         self.rounded_rect(24, 150, 148, 686, 8, fill=SURFACE, outline=LINE, width=2)

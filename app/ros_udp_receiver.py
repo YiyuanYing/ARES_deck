@@ -8,8 +8,9 @@ import ast
 import json
 import sys
 import time
+from collections import deque
 from pathlib import Path
-from typing import Any, Dict, Iterable
+from typing import Any, Deque, Dict, Iterable
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -25,6 +26,8 @@ DEFAULT_TX_ID_TOPIC = "/aruco_comm/tx_id"
 DEFAULT_DEBUG_LOG = True
 DEFAULT_DEBUG_LOG_HZ = 1.0
 DEFAULT_DEBUG_LOG_FORMAT = "block"
+DEFAULT_TX_ID_ZERO_FRAMES = 3
+DEFAULT_TX_ID_VALUE_FRAMES = 1
 RESERVED_BUTTON_NAMES = frozenset(
     {
         "QUICK_ACCESS",
@@ -118,6 +121,10 @@ def rising_tx_ids(state: dict, previous_buttons: Dict[str, bool], mapping: Dict[
     return tx_ids
 
 
+def build_tx_id_sequence(tx_id: int, zero_frames: int = DEFAULT_TX_ID_ZERO_FRAMES, value_frames: int = DEFAULT_TX_ID_VALUE_FRAMES) -> list[int]:
+    return [0] * max(int(zero_frames), 0) + [int(tx_id)] * max(int(value_frames), 0)
+
+
 def snapshot_buttons(state: dict, button_names: Iterable[str] | None = None) -> Dict[str, bool]:
     state_buttons = state.get("buttons", {})
     names = button_names if button_names is not None else BUTTON_NAMES.values()
@@ -145,6 +152,7 @@ def format_debug_block(
     tx_id_topic: str,
     publish_rate: float,
     mapped_buttons: Dict[str, int],
+    tx_id_queue_len: int = 0,
 ) -> str:
     flags = state.get("flags", {})
     tx_mapping = ",".join(f"{button}->{tx_id}" for button, tx_id in mapped_buttons.items()) if mapped_buttons else "-"
@@ -165,7 +173,7 @@ def format_debug_block(
             f"  axes   {format_axes(state)}",
             f"  btn    {format_pressed_buttons(state)}",
             f"  topic  joy={controller_topic} tx_id={tx_id_topic}",
-            f"  txmap  {tx_mapping}",
+            f"  txmap  {tx_mapping} queue={tx_id_queue_len}",
         ]
     )
 
@@ -191,6 +199,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--publish-hz", type=float, default=params.get("publish_hz", CONTROL_HZ))
     parser.add_argument("--controller-topic", default=params.get("controller_topic", DEFAULT_CONTROLLER_TOPIC))
     parser.add_argument("--tx-id-topic", default=params.get("tx_id_topic", DEFAULT_TX_ID_TOPIC))
+    parser.add_argument("--tx-id-zero-frames", type=int, default=params.get("tx_id_zero_frames", DEFAULT_TX_ID_ZERO_FRAMES))
+    parser.add_argument("--tx-id-value-frames", type=int, default=params.get("tx_id_value_frames", DEFAULT_TX_ID_VALUE_FRAMES))
     parser.add_argument(
         "--debug-log",
         action=argparse.BooleanOptionalAction,
@@ -231,6 +241,9 @@ class ControllerRosPublisher:
         self.controller_pub = self.node.create_publisher(Joy, args.controller_topic, 10)
         self.tx_id_pub = self.node.create_publisher(Int32, args.tx_id_topic, 10)
         self.previous_buttons: Dict[str, bool] = {}
+        self.tx_id_queue: Deque[int] = deque()
+        self.tx_id_zero_frames = max(int(args.tx_id_zero_frames), 0)
+        self.tx_id_value_frames = max(int(args.tx_id_value_frames), 0)
         self.period = 1.0 / max(float(args.publish_hz), 1.0)
         self.debug_log = bool(args.debug_log)
         self.debug_log_interval = 1.0 / max(float(args.debug_log_hz), 0.01)
@@ -246,6 +259,7 @@ class ControllerRosPublisher:
         self.node.get_logger().info(
             f"publishing Joy {args.controller_topic} at {1.0 / self.period:.1f}Hz, "
             f"tx_id topic {args.tx_id_topic}, mapped buttons={self.button_to_tx_id}, "
+            f"tx_id sequence zero_frames={self.tx_id_zero_frames} value_frames={self.tx_id_value_frames}, "
             f"debug_log={self.debug_log} format={self.debug_log_format}"
         )
 
@@ -267,12 +281,24 @@ class ControllerRosPublisher:
         self.note_joy_published()
 
         for tx_id in rising_tx_ids(state, self.previous_buttons, self.button_to_tx_id):
-            message = self.Int32()
-            message.data = int(tx_id)
-            self.tx_id_pub.publish(message)
-            self.node.get_logger().info(f"published {self.tx_id_topic}: {tx_id}")
+            self.enqueue_tx_id(tx_id)
         self.previous_buttons = snapshot_buttons(state, self.button_to_tx_id.keys())
+        self.publish_next_tx_id()
         self.log_debug_state(state)
+
+    def enqueue_tx_id(self, tx_id: int) -> None:
+        sequence = build_tx_id_sequence(tx_id, self.tx_id_zero_frames, self.tx_id_value_frames)
+        self.tx_id_queue.extend(sequence)
+        self.node.get_logger().info(f"queued {self.tx_id_topic}: {sequence} queue={len(self.tx_id_queue)}")
+
+    def publish_next_tx_id(self) -> None:
+        if not self.tx_id_queue:
+            return
+        tx_id = self.tx_id_queue.popleft()
+        message = self.Int32()
+        message.data = int(tx_id)
+        self.tx_id_pub.publish(message)
+        self.node.get_logger().info(f"published {self.tx_id_topic}: {tx_id} queue={len(self.tx_id_queue)}")
 
     def note_joy_published(self) -> None:
         now = time.monotonic()
@@ -300,6 +326,7 @@ class ControllerRosPublisher:
                 self.tx_id_topic,
                 self.publish_rate,
                 self.button_to_tx_id,
+                len(self.tx_id_queue),
             )
         self.node.get_logger().info(message)
 
