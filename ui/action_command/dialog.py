@@ -8,8 +8,6 @@ import tkinter as tk
 import tkinter.font as tkfont
 from typing import Callable, Dict, Tuple
 
-from core.map_message import build_action_command_payload, send_action_command_payload
-
 
 COMMAND_ROWS = (3, 2)
 COMMAND_COLS: Tuple[Tuple[str, str], ...] = (("left", "LEFT"), ("mid", "MID"), ("right", "RIGHT"))
@@ -26,6 +24,7 @@ class ActionCommandDialog:
         target_port: int,
         origin: tuple[int, int] | None = None,
         status_provider: Callable[[], str] | None = None,
+        command_callback: Callable[[str, int | None, str | None], None] | None = None,
         on_close: Callable[[], None] | None = None,
     ) -> None:
         self.parent = parent
@@ -35,6 +34,7 @@ class ActionCommandDialog:
         self.target_port = int(target_port)
         self.origin = origin
         self.status_provider = status_provider
+        self.command_callback = command_callback
         self.on_close = on_close
         self.command_buttons: Dict[Tuple[int, str], tk.Button] = {}
         self.place_button: tk.Button | None = None
@@ -192,14 +192,9 @@ class ActionCommandDialog:
 
     def send_select(self, row: int, col: str) -> None:
         button = self.command_buttons.get((row, col))
-        try:
-            payload = build_action_command_payload("select", row=row, col=col)
-            sent = send_action_command_payload(payload, self.local_ip, self.target_ip, self.target_port)
-        except Exception as exc:
-            print(f"[action-command] send failed: {exc}")
-            self.set_button_state(button, "failed", f"{row} {col.upper()}")
-            return
-        print(f"[action-command] sent select row={row} col={col} {sent} bytes -> {self.target_ip}:{self.target_port}")
+        if self.command_callback is not None:
+            self.command_callback("select", row, col)
+        print(f"[action-command] pulse select row={row} col={col}")
         self.set_button_state(button, "sent", f"{row} {col.upper()}")
 
     def send_place(self) -> None:
@@ -209,14 +204,9 @@ class ActionCommandDialog:
         self.send_simple_action("release", self.release_button, "RELEASE")
 
     def send_simple_action(self, action: str, button: tk.Button | None, label: str) -> None:
-        try:
-            payload = build_action_command_payload(action)
-            sent = send_action_command_payload(payload, self.local_ip, self.target_ip, self.target_port)
-        except Exception as exc:
-            print(f"[action-command] send failed: {exc}")
-            self.set_button_state(button, "failed", label)
-            return
-        print(f"[action-command] sent {action} {sent} bytes -> {self.target_ip}:{self.target_port}")
+        if self.command_callback is not None:
+            self.command_callback(action, None, None)
+        print(f"[action-command] pulse {action}")
         self.set_button_state(button, "sent", label)
 
     def set_button_state(self, button: tk.Button | None, state: str, label: str) -> None:

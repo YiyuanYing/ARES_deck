@@ -434,6 +434,7 @@ class ControllerPanel:
             target_port=self.map_message_port,
             origin=origin,
             status_provider=self.map_editor_status_text,
+            command_callback=self.trigger_action_command_button,
             on_close=self.clear_action_command_reference,
         )
 
@@ -489,6 +490,24 @@ class ControllerPanel:
     def toggle_virtual_button(self, button_id: int) -> None:
         new_state = not self.state.virtual_button_toggle.get(button_id, False)
         self.set_virtual_button(button_id, new_state, "toggled")
+
+    def trigger_action_command_button(self, action: str, row: int | None, col: str | None) -> None:
+        button_id = self.action_command_button_id(action, row, col)
+        if button_id is None:
+            return
+        self.virtual_button_until[button_id] = time.monotonic() + 0.25
+        print(f"[action-command] pulse button {button_id} {BUTTON_NAMES.get(button_id, action)}")
+
+    @staticmethod
+    def action_command_button_id(action: str, row: int | None, col: str | None) -> int | None:
+        if action == "place":
+            return BUTTON_IDS["ACTION_PLACE"]
+        if action == "release":
+            return BUTTON_IDS["ACTION_RELEASE"]
+        if action != "select" or row is None or col is None:
+            return None
+        key = f"ACTION_SELECT_{int(row)}_{str(col).upper()}"
+        return BUTTON_IDS.get(key)
 
     def trigger_clear_estop(self) -> None:
         steam_button_id = BUTTON_IDS["STEAM"]

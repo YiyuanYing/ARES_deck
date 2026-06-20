@@ -164,7 +164,8 @@ def format_debug_block(
             ),
             f"  axes   {format_axes(state)}",
             f"  btn    {format_pressed_buttons(state)}",
-            f"  topic  joy={controller_topic} tx_id={tx_id_topic} map={tx_mapping}",
+            f"  topic  joy={controller_topic} tx_id={tx_id_topic}",
+            f"  txmap  {tx_mapping}",
         ]
     )
 
