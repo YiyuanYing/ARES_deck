@@ -26,8 +26,15 @@ DEFAULT_TX_ID_TOPIC = "/aruco_comm/tx_id"
 DEFAULT_DEBUG_LOG = True
 DEFAULT_DEBUG_LOG_HZ = 1.0
 DEFAULT_DEBUG_LOG_FORMAT = "block"
+DEFAULT_DEBUG_LOG_COLOR = True
 DEFAULT_TX_ID_ZERO_FRAMES = 3
 DEFAULT_TX_ID_VALUE_FRAMES = 1
+ANSI_RESET = "\033[0m"
+ANSI_DIM = "\033[2m"
+ANSI_GREEN = "\033[92m"
+ANSI_YELLOW = "\033[93m"
+ANSI_RED = "\033[91m"
+ANSI_CYAN = "\033[96m"
 RESERVED_BUTTON_NAMES = frozenset(
     {
         "QUICK_ACCESS",
@@ -146,6 +153,22 @@ def format_axes(state: dict) -> str:
     )
 
 
+def color_text(text: str, color: str, enabled: bool) -> str:
+    if not enabled:
+        return text
+    return f"{color}{text}{ANSI_RESET}"
+
+
+def host_status(state: dict) -> tuple[str, str]:
+    if state.get("remote_timeout", False):
+        return "LOST", ANSI_RED
+    if state.get("warning", False):
+        return "WARN", ANSI_YELLOW
+    if state.get("online", False):
+        return "OK", ANSI_GREEN
+    return "WAITING", ANSI_DIM
+
+
 def format_debug_block(
     state: dict,
     controller_topic: str,
@@ -153,35 +176,43 @@ def format_debug_block(
     publish_rate: float,
     mapped_buttons: Dict[str, int],
     tx_id_queue_len: int = 0,
+    color: bool = False,
 ) -> str:
     flags = state.get("flags", {})
     tx_mapping = ",".join(f"{button}->{tx_id}" for button, tx_id in mapped_buttons.items()) if mapped_buttons else "-"
+    host, host_color = host_status(state)
+    estop = bool(flags.get("estop", False))
+    timeout = bool(state.get("remote_timeout", False))
+    enable = bool(flags.get("enable", False))
+    safe_text = f"estop={estop} timeout={timeout} enable={enable}"
+    safe_color = ANSI_RED if estop or timeout else ANSI_GREEN
     return "\n".join(
         [
-            "ROS UDP receiver",
+            color_text("ROS UDP receiver", ANSI_CYAN, color),
             (
-                f"  link   online={bool(state.get('online', False))} "
-                f"timeout={bool(state.get('remote_timeout', False))} "
-                f"estop={bool(flags.get('estop', False))} "
+                f"  HOST   {color_text(host, host_color, color):<18} "
+                f"udp_rx={float(state.get('rx_rate', 0.0)):.0f}/s "
                 f"seq={state.get('seq')} age={float(state.get('age_ms', 0.0)):.0f}ms"
             ),
+            f"  SAFE   {color_text(safe_text, safe_color, color)}",
             (
-                f"  rate   joy_pub={publish_rate:.0f}/s "
-                f"udp_rx={float(state.get('rx_rate', 0.0)):.0f}/s "
+                f"  JOY    pub={publish_rate:.0f}/s "
                 f"lost={state.get('lost', 0)} jitter={float(state.get('jitter_ms', 0.0)):.1f}ms"
             ),
-            f"  axes   {format_axes(state)}",
-            f"  btn    {format_pressed_buttons(state)}",
-            f"  topic  joy={controller_topic} tx_id={tx_id_topic}",
-            f"  txmap  {tx_mapping} queue={tx_id_queue_len}",
+            f"  AXES   {format_axes(state)}",
+            f"  BTN    {format_pressed_buttons(state)}",
+            f"  TOPIC  joy={controller_topic} tx_id={tx_id_topic}",
+            f"  TXID   map={tx_mapping} queue={tx_id_queue_len}",
         ]
     )
 
 
-def format_debug_line(state: dict, controller_topic: str, publish_rate: float) -> str:
+def format_debug_line(state: dict, controller_topic: str, publish_rate: float, color: bool = False) -> str:
     flags = state.get("flags", {})
+    host, host_color = host_status(state)
     return (
         f"{controller_topic} pub={publish_rate:.0f}/s "
+        f"host={color_text(host, host_color, color)} "
         f"udp_rx={float(state.get('rx_rate', 0.0)):.0f}/s "
         f"online={bool(state.get('online', False))} "
         f"timeout={bool(state.get('remote_timeout', False))} "
@@ -212,6 +243,12 @@ def parse_args() -> argparse.Namespace:
         "--debug-log-format",
         choices=("block", "line"),
         default=params.get("debug_log_format", DEFAULT_DEBUG_LOG_FORMAT),
+    )
+    parser.add_argument(
+        "--debug-log-color",
+        action=argparse.BooleanOptionalAction,
+        default=params.get("debug_log_color", DEFAULT_DEBUG_LOG_COLOR),
+        help="Colorize debug logs with ANSI escape codes.",
     )
     parser.add_argument(
         "--button-to-tx-id",
@@ -248,6 +285,7 @@ class ControllerRosPublisher:
         self.debug_log = bool(args.debug_log)
         self.debug_log_interval = 1.0 / max(float(args.debug_log_hz), 0.01)
         self.debug_log_format = str(args.debug_log_format)
+        self.debug_log_color = bool(args.debug_log_color)
         self.next_debug_log_at = 0.0
         self.publish_count = 0
         self.publish_window_start = time.monotonic()
@@ -260,7 +298,7 @@ class ControllerRosPublisher:
             f"publishing Joy {args.controller_topic} at {1.0 / self.period:.1f}Hz, "
             f"tx_id topic {args.tx_id_topic}, mapped buttons={self.button_to_tx_id}, "
             f"tx_id sequence zero_frames={self.tx_id_zero_frames} value_frames={self.tx_id_value_frames}, "
-            f"debug_log={self.debug_log} format={self.debug_log_format}"
+            f"debug_log={self.debug_log} format={self.debug_log_format} color={self.debug_log_color}"
         )
 
     def start(self) -> None:
@@ -318,7 +356,7 @@ class ControllerRosPublisher:
         self.next_debug_log_at = now + self.debug_log_interval
 
         if self.debug_log_format == "line":
-            message = format_debug_line(state, self.controller_topic, self.publish_rate)
+            message = format_debug_line(state, self.controller_topic, self.publish_rate, self.debug_log_color)
         else:
             message = format_debug_block(
                 state,
@@ -327,6 +365,7 @@ class ControllerRosPublisher:
                 self.publish_rate,
                 self.button_to_tx_id,
                 len(self.tx_id_queue),
+                self.debug_log_color,
             )
         self.node.get_logger().info(message)
 

@@ -114,6 +114,12 @@ python3 -m app.ros_udp_receiver --no-debug-log
 python3 -m app.ros_udp_receiver --debug-log-format line
 ```
 
+如果终端不支持颜色，临时关闭彩色 debug log：
+
+```bash
+python3 -m app.ros_udp_receiver --no-debug-log-color
+```
+
 ROS2 接收端会发布：
 
 - `/controller` (`sensor_msgs/msg/Joy`): 完整遥控器状态。
