@@ -80,7 +80,7 @@ class ControllerUdpReceiver:
         self.latest_frame: dict | None = None
         self.latest_state = self._empty_state()
         self.timeout_ms = DEFAULT_FAILSAFE_TIMEOUT_MS
-        self.estop_latched = False
+        self.estop_active = False
 
     def start(self) -> None:
         if self.thread and self.thread.is_alive():
@@ -153,14 +153,8 @@ class ControllerUdpReceiver:
             self.stats.last_seq = seq
 
             self.timeout_ms = int(clamp(frame.get("failsafe_timeout_ms", DEFAULT_FAILSAFE_TIMEOUT_MS), MIN_FAILSAFE_TIMEOUT_MS, MAX_FAILSAFE_TIMEOUT_MS))
-            reset_requested = bool(frame["buttons"].get("VIRTUAL_RESET", False))
             frame_estop = bool(frame["flags"].get("estop", False))
-            if reset_requested:
-                self.estop_latched = False
-            elif frame_estop:
-                self.estop_latched = True
-            # Reset has priority over an ESTOP bit in the same frame so a clear pulse
-            # can recover from stale local ESTOP toggles on the sender.
+            self.estop_active = frame_estop
             self.latest_frame = frame
 
     def update_state(self) -> dict:
@@ -182,14 +176,12 @@ class ControllerUdpReceiver:
         age_ms = (now - self.stats.last_frame_at) * 1000.0
         warning = age_ms > WARNING_TIMEOUT_MS
         remote_timeout = age_ms > self.timeout_ms
-        if remote_timeout:
-            self.estop_latched = True
 
         frame = self.latest_frame
         flags = dict(frame["flags"])
-        flags["estop"] = bool(self.estop_latched)
+        flags["estop"] = bool(self.estop_active)
 
-        safe_output = warning or remote_timeout or self.estop_latched
+        safe_output = remote_timeout or self.estop_active
 
         axes = dict(frame["axes"])
         buttons = dict(frame["buttons"])
@@ -306,7 +298,7 @@ def build_status_block(state: dict) -> str:
     bad_total = sum(bad_packets.values())
 
     if state["remote_timeout"]:
-        status_text = "TIMEOUT -> ESTOP"
+        status_text = "TIMEOUT -> ZEROED"
     elif state["flags"].get("estop", False):
         status_text = "ESTOP"
     elif state.get("warning"):
@@ -352,7 +344,7 @@ def build_status_line(state: dict) -> str:
     axes_text = format_axes(state["axes"])
     frame_text = format_frame(state.get("frame"))
     if state["remote_timeout"]:
-        return f"[{timestamp}] TIMEOUT age={state['age_ms']:.0f}ms -> ESTOP axes={axes_text} frame={frame_text}"
+        return f"[{timestamp}] TIMEOUT age={state['age_ms']:.0f}ms -> ZEROED axes={axes_text} frame={frame_text}"
 
     addr = state.get("from")
     addr_text = f"{addr[0]}:{addr[1]}" if addr else "-"

@@ -27,3 +27,14 @@ udp_sender:
   target_port: 5005
   send_hz: 100.0
   failsafe_timeout_ms: 150
+
+ros_udp_receiver:
+  bind_ip: "0.0.0.0"
+  port: 5005
+  publish_hz: 100.0
+  controller_topic: "/controller"
+  tx_id_topic: "/aruco_comm/tx_id"
+  debug_log: true
+  debug_log_hz: 10.0
+  debug_log_format: "block"
+  button_to_tx_id: "{}"

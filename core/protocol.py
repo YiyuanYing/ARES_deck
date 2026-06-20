@@ -58,14 +58,14 @@ BUTTON_NAMES = {
     21: "R4",
     22: "L5",
     23: "R5",
-    32: "VIRTUAL_ESTOP",
-    33: "VIRTUAL_ENABLE",
-    34: "VIRTUAL_LOW_SPEED",
-    35: "VIRTUAL_HIGH_SPEED",
-    36: "VIRTUAL_AUTO_MODE",
-    37: "VIRTUAL_RESET",
-    38: "VIRTUAL_AUX_1",
-    39: "VIRTUAL_AUX_2",
+    32: "VIRTUAL_BUTTON_1",
+    33: "VIRTUAL_BUTTON_2",
+    34: "VIRTUAL_BUTTON_3",
+    35: "VIRTUAL_BUTTON_4",
+    36: "VIRTUAL_BUTTON_5",
+    37: "VIRTUAL_BUTTON_6",
+    38: "VIRTUAL_BUTTON_7",
+    39: "VIRTUAL_BUTTON_8",
 }
 BUTTON_IDS = {name: button_id for button_id, name in BUTTON_NAMES.items()}
 
@@ -175,20 +175,12 @@ def build_controller_frame(
     inferred_estop = (
         bool(estop)
         or get_button_bit(buttons_low, buttons_high, BUTTON_IDS["STEAM"])
-        or get_button_bit(buttons_low, buttons_high, BUTTON_IDS["VIRTUAL_ESTOP"])
     )
-    inferred_enable = (
-        bool(enable)
-        or get_button_bit(buttons_low, buttons_high, BUTTON_IDS["VIRTUAL_ENABLE"])
-    )
-
     flags = DEFAULT_FLAGS
-    if inferred_enable:
+    if bool(enable):
         flags |= FLAG_ENABLE
     if inferred_estop:
         flags |= FLAG_ESTOP
-    if get_button_bit(buttons_low, buttons_high, BUTTON_IDS["VIRTUAL_AUTO_MODE"]):
-        flags = (flags & ~FLAG_MANUAL_MODE) | FLAG_AUTO_MODE
 
     frame_without_crc = struct.pack(
         FRAME_FMT_WITHOUT_CRC,
@@ -289,7 +281,7 @@ def _self_test() -> None:
     assert struct.calcsize(FRAME_FMT) == FRAME_LENGTH
 
     axes = {"lx": 0.123, "ly": -0.35, "rx": 0.0, "ry": 1.25}
-    buttons = {"A": True, "B": False, "RB": True, "STEAM": False, "VIRTUAL_ENABLE": True}
+    buttons = {"A": True, "B": False, "RB": True, "STEAM": False, "VIRTUAL_BUTTON_2": True}
     frame = build_controller_frame(65535, axes, buttons, enable=False)
     parsed = parse_controller_frame(frame)
     assert len(frame) == FRAME_LENGTH
@@ -300,7 +292,7 @@ def _self_test() -> None:
     assert parsed["buttons"]["A"] is True
     assert parsed["buttons"]["RB"] is True
     assert parsed["buttons"]["B"] is False
-    assert parsed["flags"]["enable"] is True
+    assert parsed["flags"]["enable"] is False
     assert parsed["flags"]["estop"] is False
 
     bad = bytearray(frame)

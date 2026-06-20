@@ -20,7 +20,6 @@ DEFAULT_REMOTE_IP = TARGET_IP
 DEFAULT_UDP_PORT = TARGET_PORT
 DEFAULT_MAP_MESSAGE_PORT = MAP_MESSAGE_PORT
 UDP_SEND_HZ = SEND_HZ
-RESET_PULSE_SECONDS = 0.25
 MAP_EDITOR_TRIGGER_BUTTON_ID = 13  # Steam 键：按下会打开目标地图编辑器。
 ACTION_COMMAND_TRIGGER_BUTTON_ID = 2  # 快捷菜单键 / ...：按下会打开动作指令窗口。
 
@@ -91,14 +90,14 @@ JS_EVENT_SIZE = 8
 
 # Virtual touchscreen buttons. Edit each button's "mode" field to change behavior.
 VIRTUAL_BUTTON_MAP = {
-    32: {"name": "Button1", "label": "BTN 1", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 182, "y": 188, "w": 200, "h": 164, "radius": 8},  # 虚拟急停键 BTN 1
-    33: {"name": "Button2", "label": "BTN 2", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 419, "y": 188, "w": 200, "h": 164, "radius": 8},  # 虚拟使能键 BTN 2
-    34: {"name": "Button3", "label": "BTN 3", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 656, "y": 188, "w": 200, "h": 164, "radius": 8},  # 虚拟低速键 BTN 3
-    35: {"name": "Button4", "label": "BTN 4", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 893, "y": 188, "w": 200, "h": 164, "radius": 8},  # 虚拟高速键 BTN 4
-    36: {"name": "Button5", "label": "BTN 5", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 182, "y": 380, "w": 200, "h": 164, "radius": 8},  # 虚拟自动模式键 BTN 5
-    37: {"name": "Button6", "label": "BTN 6", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 419, "y": 380, "w": 200, "h": 164, "radius": 8},  # 虚拟复位键 BTN 6
-    38: {"name": "Button7", "label": "BTN 7", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 656, "y": 380, "w": 200, "h": 164, "radius": 8},  # 虚拟辅助键 1 BTN 7
-    39: {"name": "Button8", "label": "BTN 8", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 893, "y": 380, "w": 200, "h": 164, "radius": 8},  # 虚拟辅助键 2 BTN 8
+    32: {"name": "Virtual Button 1", "label": "", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 182, "y": 188, "w": 200, "h": 164, "radius": 8},
+    33: {"name": "Virtual Button 2", "label": "", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 419, "y": 188, "w": 200, "h": 164, "radius": 8},
+    34: {"name": "Virtual Button 3", "label": "", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 656, "y": 188, "w": 200, "h": 164, "radius": 8},
+    35: {"name": "Virtual Button 4", "label": "", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 893, "y": 188, "w": 200, "h": 164, "radius": 8},
+    36: {"name": "Virtual Button 5", "label": "", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 182, "y": 380, "w": 200, "h": 164, "radius": 8},
+    37: {"name": "Virtual Button 6", "label": "", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 419, "y": 380, "w": 200, "h": 164, "radius": 8},
+    38: {"name": "Virtual Button 7", "label": "", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 656, "y": 380, "w": 200, "h": 164, "radius": 8},
+    39: {"name": "Virtual Button 8", "label": "", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 893, "y": 380, "w": 200, "h": 164, "radius": 8},
 }
 
 VIRTUAL_BUTTON_IDS = tuple(VIRTUAL_BUTTON_MAP)

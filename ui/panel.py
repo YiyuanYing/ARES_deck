@@ -30,7 +30,6 @@ from ui.config import (
     MAP_EDITOR_TRIGGER_BUTTON_ID,
     OUTPUT_PHYSICAL_BUTTON_IDS,
     REFRESH_MS,
-    RESET_PULSE_SECONDS,
     UI_COLOR_THEME,
     UI_COLOR_THEMES,
     VIRTUAL_BUTTON_IDS,
@@ -492,14 +491,11 @@ class ControllerPanel:
         self.set_virtual_button(button_id, new_state, "toggled")
 
     def trigger_clear_estop(self) -> None:
-        estop_button_id = BUTTON_IDS["VIRTUAL_ESTOP"]
-        reset_button_id = BUTTON_IDS["VIRTUAL_RESET"]
         steam_button_id = BUTTON_IDS["STEAM"]
-        self.state.virtual_button_toggle[estop_button_id] = False
-        self.state.virtual_button_toggle[reset_button_id] = False
+        menu_button_id = BUTTON_IDS["MENU"]
         self.state.button_toggle[steam_button_id] = False
-        self.virtual_button_until[reset_button_id] = time.monotonic() + max(RESET_PULSE_SECONDS, 0.75)
-        print("[safety] local ESTOP sources cleared; VIRTUAL_RESET pulse sent to clear ESTOP latch")
+        self.state.button_toggle[menu_button_id] = False
+        print("[safety] local ESTOP sources cleared")
 
     def reset_toggles(self, _event: tk.Event | None = None) -> None:
         for button_id in self.state.button_toggle:
@@ -559,6 +555,7 @@ class ControllerPanel:
                 expired_virtual_buttons.append(button_id)
         for button_id in expired_virtual_buttons:
             self.virtual_button_until.pop(button_id, None)
+        estop_active = bool(self.state.button_toggle.get(BUTTON_IDS["MENU"], False))
         self.suppress_ui_trigger_buttons(buttons)
 
         return {
@@ -569,14 +566,14 @@ class ControllerPanel:
                 "ry": self.state.axis_values.get(3, 0.0),
             },
             "buttons": buttons,
-            "enable": True,
-            "estop": False,
+            "enable": not estop_active,
+            "estop": estop_active,
         }
 
     def suppress_ui_trigger_buttons(self, buttons: Dict[int, bool]) -> None:
         # Steam is treated as ESTOP by ControllerFrame V2. UI-only trigger keys
         # must not leak into the real-time control bitmask.
-        for button_id in (MAP_EDITOR_TRIGGER_BUTTON_ID, ACTION_COMMAND_TRIGGER_BUTTON_ID):
+        for button_id in (MAP_EDITOR_TRIGGER_BUTTON_ID, ACTION_COMMAND_TRIGGER_BUTTON_ID, BUTTON_IDS["MENU"]):
             if button_id is not None:
                 buttons[int(button_id)] = False
 
@@ -706,6 +703,7 @@ class ControllerPanel:
 
         self.draw_header()
         self.draw_edge_guides()
+        self.draw_host_disconnect_banner()
         self.draw_axis_widgets()
         self.draw_virtual_buttons()
 
@@ -747,8 +745,10 @@ class ControllerPanel:
         host_fresh = host_checked_at > 0.0 and time.monotonic() - host_checked_at <= 2.5
         host_ok = host_reachable and host_fresh
         host_color = HOST_CONNECTED if host_ok else RED
+        host_connected_style = False
         if host_ok:
             host_text = f"HOST connected -> {metrics.target_ip}:{metrics.target_port}"
+            host_connected_style = True
         elif not host_fresh:
             host_text = f"HOST checking -> {metrics.target_ip}:{metrics.target_port}"
             host_color = YELLOW
@@ -766,8 +766,11 @@ class ControllerPanel:
             anchor="w",
         )
         self.draw_status_pill(404, 40, 374, "DEVICE", device_text, device_color)
-        self.draw_status_pill(804, 40, 420, "LINK", host_text, host_color)
-        if self.state.status_is_error:
+        self.draw_status_pill(804, 40, 420, "LINK", host_text, host_color, connected_style=host_connected_style)
+        if self.is_estop_active():
+            detail_text = "ESTOP LOCKED - PRESS MENU TO RELEASE"
+            detail_color = RED
+        elif self.state.status_is_error:
             detail_text = "sudo usermod -aG input $USER    sudo reboot"
             detail_color = RED
         elif self.calibrating:
@@ -832,14 +835,18 @@ class ControllerPanel:
                         outline="",
                     )
 
-    def draw_status_pill(self, x: float, y: float, width: float, title: str, value: str, color: str) -> None:
-        self.rounded_rect(x, y, x + width, y + 54, 8, fill=PANEL_DARK, outline=LINE, width=2)
+    def draw_status_pill(self, x: float, y: float, width: float, title: str, value: str, color: str, connected_style: bool = False) -> None:
+        fill = blend_color(PANEL_DARK, HOST_CONNECTED, 0.20) if connected_style else PANEL_DARK
+        outline = HOST_CONNECTED if connected_style else LINE
+        title_color = HOST_CONNECTED if connected_style else MUTED
+        value_color = HOST_CONNECTED if connected_style else TEXT
+        self.rounded_rect(x, y, x + width, y + 54, 8, fill=fill, outline=outline, width=3 if connected_style else 2)
         self.circle(x + 20, y + 27, 5, fill=color, outline=color, width=1)
         self.canvas.create_text(
             self.x(x + 36),
             self.y(y + 18),
             text=title,
-            fill=MUTED,
+            fill=title_color,
             font=("DejaVu Sans", 9, "bold"),
             anchor="w",
         )
@@ -847,9 +854,31 @@ class ControllerPanel:
             self.x(x + 36),
             self.y(y + 36),
             text=value[:46],
-            fill=TEXT,
+            fill=value_color,
             font=("DejaVu Sans", 12, "bold"),
             anchor="w",
+        )
+
+    def is_host_disconnected(self) -> bool:
+        host_reachable, host_checked_at = self.host_monitor.snapshot()
+        host_fresh = host_checked_at > 0.0 and time.monotonic() - host_checked_at <= 2.5
+        return host_fresh and not host_reachable
+
+    def is_estop_active(self) -> bool:
+        return bool(self.state.button_toggle.get(BUTTON_IDS["MENU"], False))
+
+    def draw_host_disconnect_banner(self) -> None:
+        if not self.is_host_disconnected():
+            return
+        pulse = 0.5 + 0.5 * math.sin(time.monotonic() * 7.0)
+        outline = blend_color(RED, ACTIVE_GLOW, pulse * 0.35)
+        self.rounded_rect(162, 132, 1118, 160, 8, fill=DANGER_BG, outline=outline, width=3)
+        self.canvas.create_text(
+            self.x(640),
+            self.y(146),
+            text="HOST DISCONNECTED - OUTPUT ZEROED",
+            fill=ACTIVE_TEXT,
+            font=("DejaVu Sans", 15, "bold"),
         )
 
     def draw_edge_guides(self) -> None:
@@ -943,7 +972,7 @@ class ControllerPanel:
                 self.y(spec["y"] + spec["h"] / 2),
                 text=spec["label"],
                 fill=blend_color(TEXT, ACTIVE_TEXT, light),
-                font=("DejaVu Sans", 21, "bold"),
+                font=("DejaVu Sans", 19 if "\n" in str(spec["label"]) else 21, "bold"),
                 justify="center",
             )
 
@@ -985,7 +1014,12 @@ class ControllerPanel:
         toggled = self.state.button_toggle.get(button_id, False)
         pressed = self.state.button_physical.get(button_id, False)
         light = self.ease_light(self.button_light_level("physical", button_id, toggled))
-        if light > 0.0:
+        if button_id == BUTTON_IDS["MENU"] and toggled:
+            fill = DANGER_BG
+            outline = blend_color(RED, ACTIVE_GLOW, self.active_pulse(button_id) * 0.6)
+            width = 4
+            light = 1.0
+        elif light > 0.0:
             fill = blend_color(BUTTON_IDLE, GREEN_DARK, light)
             outline = blend_color(BUTTON_IDLE_OUTLINE, blend_color(GREEN, ACTIVE_GLOW, self.active_pulse(button_id) * light), light)
             width = 2 + round(light * 2)
