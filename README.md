@@ -139,7 +139,58 @@ ROS2 接收端会发布：
   - `data` 固定 51 个 float。
   - `data[0..45]` 按协议 button ID 升序放按钮状态，未按下/未定义为 `0.0`，按下为 `1.0`。
   - `ACTION_RELEASE` 已移除，不保留空洞；`ACTION_PLACE` 压缩到 `data[46]`。
+  - 已在 `button_to_tx_id` 中分配为 action 的按钮不会进入 `/controller`，对应位置保持 `0.0`，只通过 `/aruco_comm/tx_id` 和 `/command` 发送。
   - `data[-4:] = [lx, ly, rx, ry]`，也就是 `data[47..50]` 放两对摇杆值。
+
+`/controller.data` 索引表：
+
+| Index | Name | Status |
+|---:|---|---|
+| 0 | LEFT_TRACKPAD | control |
+| 1 | RIGHT_TRACKPAD | control |
+| 2 | QUICK_ACCESS | UI/reserved, forced `0.0` |
+| 3 | A | control |
+| 4 | B | control |
+| 5 | X | control |
+| 6 | Y | control |
+| 7 | LB | control |
+| 8 | RB | control |
+| 9 | LT_FULL | control |
+| 10 | RT_FULL | control |
+| 11 | VIEW | control |
+| 12 | MENU | UI/safety, forced `0.0` |
+| 13 | STEAM | UI/safety, forced `0.0` |
+| 14 | L3 | control |
+| 15 | R3 | control |
+| 16 | DPAD_UP | control |
+| 17 | DPAD_DOWN | control |
+| 18 | DPAD_LEFT | control |
+| 19 | DPAD_RIGHT | control |
+| 20 | L4 | control |
+| 21 | R4 | control |
+| 22 | L5 | control |
+| 23 | R5 | control |
+| 24-31 | undefined | forced `0.0` |
+| 32 | VIRTUAL_BUTTON_1 | control |
+| 33 | VIRTUAL_BUTTON_2 | control |
+| 34 | VIRTUAL_BUTTON_3 | control |
+| 35 | VIRTUAL_BUTTON_4 | control |
+| 36 | VIRTUAL_BUTTON_5 | control |
+| 37 | VIRTUAL_BUTTON_6 | control |
+| 38 | VIRTUAL_BUTTON_7 | control |
+| 39 | VIRTUAL_BUTTON_8 | control |
+| 40 | ACTION_SELECT_3_LEFT | action occupied, forced `0.0` |
+| 41 | ACTION_SELECT_3_MID | action occupied, forced `0.0` |
+| 42 | ACTION_SELECT_3_RIGHT | action occupied, forced `0.0` |
+| 43 | ACTION_SELECT_2_LEFT | action occupied, forced `0.0` |
+| 44 | ACTION_SELECT_2_MID | action occupied, forced `0.0` |
+| 45 | ACTION_SELECT_2_RIGHT | action occupied, forced `0.0` |
+| 46 | ACTION_PLACE | action occupied, forced `0.0` |
+| 47 | lx | axis |
+| 48 | ly | axis |
+| 49 | rx | axis |
+| 50 | ry | axis |
+
 - `/aruco_comm/tx_id` (`std_msgs/msg/Int32`): 预留给按键到 ArUco tx id 的上升沿映射，默认不绑定任何键。
   - 触发后会先发布 3 帧 `0`，再发布 1 帧目标整数；多个触发会排队发送。
 - `/command` (`ares_deck_interfaces/action/Command`): 启用 `command_action_enabled` 后，每次 tx id 上升沿会同时发送一个 action goal。

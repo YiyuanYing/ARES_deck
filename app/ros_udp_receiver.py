@@ -123,10 +123,13 @@ def controller_axes_from_state(state: dict) -> list[float]:
     return [float(axes.get(axis_key, 0.0)) for axis_key in AXIS_KEYS]
 
 
-def controller_array_from_state(state: dict) -> list[float]:
+def controller_array_from_state(state: dict, excluded_buttons: Iterable[str] | None = None) -> list[float]:
     state_buttons = state.get("buttons", {})
+    excluded = set(excluded_buttons or ())
     button_values = [0.0] * CONTROLLER_BUTTON_COUNT
     for index, button_name in ARRAY_BUTTON_INDEX_TO_NAME.items():
+        if button_name in excluded:
+            continue
         button_values[index] = 1.0 if bool(state_buttons.get(button_name, False)) else 0.0
     return button_values + controller_axes_from_state(state)
 
@@ -378,7 +381,7 @@ class ControllerRosPublisher:
     def publish_once(self) -> None:
         state = self.receiver.update_state()
         message = self.Float32MultiArray()
-        message.data = controller_array_from_state(state)
+        message.data = controller_array_from_state(state, self.button_to_tx_id.keys())
         self.controller_pub.publish(message)
         self.note_controller_published()
 
