@@ -20,6 +20,8 @@ from core.udp_sender import (
     TARGET_IP,
     TARGET_PORT,
     ControllerUdpSender,
+    normalize_udp_targets,
+    parse_udp_target,
 )
 
 
@@ -29,6 +31,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--local-ip", default=params.get("local_ip", LOCAL_IP))
     parser.add_argument("--target-ip", default=params.get("target_ip", TARGET_IP))
     parser.add_argument("--target-port", type=int, default=params.get("target_port", TARGET_PORT))
+    parser.add_argument("--target", action="append", default=None, help="UDP receiver target as IP:PORT[:MAP_PORT]. Repeat for multiple targets.")
     parser.add_argument("--send-hz", type=float, default=params.get("send_hz", SEND_HZ))
     parser.add_argument("--failsafe-timeout-ms", type=int, default=params.get("failsafe_timeout_ms", FAILSAFE_TIMEOUT_MS))
     return parser.parse_args()
@@ -36,10 +39,18 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    params = get_section("udp_sender")
+    target_entries = args.target if args.target is not None else params.get("targets")
+    targets = normalize_udp_targets(
+        [parse_udp_target(item, args.target_port) for item in target_entries] if args.target is not None else target_entries,
+        fallback_ip=args.target_ip,
+        fallback_port=args.target_port,
+    )
     sender = ControllerUdpSender(
         local_ip=args.local_ip,
         target_ip=args.target_ip,
         target_port=args.target_port,
+        targets=targets,
         send_hz=args.send_hz,
         failsafe_timeout_ms=args.failsafe_timeout_ms,
         print_status=True,

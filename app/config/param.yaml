@@ -3,6 +3,13 @@ controller_panel:
   remote_ip: "192.168.1.50"
   port: 5005
   map_port: 5006
+  targets:
+    - ip: "192.168.1.50"
+      port: 5005
+      map_port: 5006
+    - ip: "192.168.1.51"
+      port: 6005
+      map_port: 6006
   send_hz: 100.0
   failsafe_timeout_ms: 150
   touch_device: ""
@@ -25,6 +32,13 @@ udp_sender:
   local_ip: "192.168.1.20"
   target_ip: "192.168.1.50"
   target_port: 5005
+  targets:
+    - ip: "192.168.1.50"
+      port: 5005
+      map_port: 5006
+    - ip: "192.168.1.51"
+      port: 6005
+      map_port: 6006
   send_hz: 100.0
   failsafe_timeout_ms: 150
 

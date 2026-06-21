@@ -12,7 +12,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.params import get_section
-from core.udp_sender import FAILSAFE_TIMEOUT_MS, LOCAL_IP, SEND_HZ, TARGET_IP, TARGET_PORT
+from core.udp_sender import FAILSAFE_TIMEOUT_MS, LOCAL_IP, SEND_HZ, TARGET_IP, TARGET_PORT, parse_udp_target, normalize_udp_targets
 from ui.config import (
     BUTTON_ACTIVATION_MODES,
     DEFAULT_BUTTON_ACTIVATION_MODE,
@@ -76,6 +76,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--touch-invert-y", action="store_true", default=params.get("touch_invert_y", TOUCH_INVERT_Y), help="Invert touchscreen Y axis.")
     parser.add_argument("--debug-touch", action="store_true", default=params.get("debug_touch", False), help="Print raw and mapped touchscreen coordinates.")
     parser.add_argument(
+        "--target",
+        action="append",
+        default=None,
+        help="UDP receiver target as IP:PORT[:MAP_PORT]. Repeat to send to multiple targets.",
+    )
+    parser.add_argument(
         "--virtual-button-mode-default",
         choices=BUTTON_ACTIVATION_MODES,
         default=DEFAULT_BUTTON_ACTIVATION_MODE,
@@ -104,6 +110,14 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    params = get_section("controller_panel")
+    target_entries = args.target if args.target is not None else params.get("targets")
+    targets = normalize_udp_targets(
+        [parse_udp_target(item, args.port, args.map_port) for item in target_entries] if args.target is not None else target_entries,
+        fallback_ip=args.remote_ip,
+        fallback_port=args.port,
+        fallback_map_port=args.map_port,
+    )
     virtual_button_modes = dict(args.virtual_button_modes or {})
     physical_button_modes = dict(PHYSICAL_BUTTON_MODE_MAP)
     physical_button_modes.update(args.physical_button_modes or {})
@@ -124,6 +138,7 @@ def main() -> None:
         virtual_button_modes,
         args.physical_button_mode_default,
         physical_button_modes,
+        targets,
     )
     panel.run()
 

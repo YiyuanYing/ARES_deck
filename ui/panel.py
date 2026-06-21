@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Tuple
 
 from core.protocol import BUTTON_IDS, BUTTON_NAMES
-from core.udp_sender import ControllerUdpSender
+from core.udp_sender import ControllerUdpSender, UdpTarget, normalize_udp_targets
 from ui.config import (
     ACTION_COMMAND_TRIGGER_BUTTON_ID,
     AXIS_MAP,
@@ -144,6 +144,7 @@ class ControllerPanel:
         virtual_button_modes: Dict[int, str] | None = None,
         physical_button_mode_default: str = DEFAULT_BUTTON_ACTIVATION_MODE,
         physical_button_modes: Dict[int, str] | None = None,
+        targets: List[UdpTarget] | None = None,
     ) -> None:
         self.root = tk.Tk()
         self.root.title("SUSTECH-ARES ROBOCON2026")
@@ -174,17 +175,19 @@ class ControllerPanel:
                 debug_touch=debug_touch,
                 screen_size_provider=self.get_touch_canvas_size,
             )
-        self.host_monitor = HostReachabilityMonitor(remote_ip)
         self.local_ip = local_ip
-        self.remote_ip = remote_ip
-        self.map_message_port = int(map_message_port)
+        self.targets = normalize_udp_targets(targets, fallback_ip=remote_ip, fallback_port=udp_port, fallback_map_port=map_message_port)
+        self.remote_ip = self.targets[0].ip
+        self.map_message_port = int(self.targets[0].map_port)
+        self.host_monitor = HostReachabilityMonitor([target.ip for target in self.targets])
         self.map_editor_dialog: TargetMapEditorDialog | None = None
         self.action_command_dialog: ActionCommandDialog | None = None
         self.udp_sender = ControllerUdpSender(
             state_provider=self.get_controller_snapshot,
             local_ip=local_ip,
-            target_ip=remote_ip,
-            target_port=udp_port,
+            target_ip=self.remote_ip,
+            target_port=self.targets[0].port,
+            targets=self.targets,
             send_hz=send_hz,
             failsafe_timeout_ms=failsafe_timeout_ms,
         )
@@ -474,16 +477,10 @@ class ControllerPanel:
         )
 
     def map_editor_status_text(self) -> str:
-        metrics = self.udp_sender.snapshot_metrics()
-        host_reachable, host_checked_at = self.host_monitor.snapshot()
-        host_fresh = host_checked_at > 0.0 and time.monotonic() - host_checked_at <= 2.5
-        if host_reachable and host_fresh:
-            state = "connected"
-        elif not host_fresh:
-            state = "checking"
-        else:
-            state = "disconnected"
-        return f"HOST {state} -> {metrics.target_ip}:{metrics.target_port}"
+        statuses = self.host_status_rows()
+        total = len(statuses)
+        connected = sum(1 for item in statuses if item["state"] == "connected")
+        return f"HOST {connected}/{total} connected"
 
     def set_virtual_button(self, button_id: int, state: bool, reason: str) -> None:
         if self.state.virtual_button_toggle.get(button_id, False) == state:
@@ -764,20 +761,6 @@ class ControllerPanel:
 
     def draw_header(self) -> None:
         device_color = GREEN if self.state.connected else RED
-        metrics = self.udp_sender.snapshot_metrics()
-        host_reachable, host_checked_at = self.host_monitor.snapshot()
-        host_fresh = host_checked_at > 0.0 and time.monotonic() - host_checked_at <= 2.5
-        host_ok = host_reachable and host_fresh
-        host_color = HOST_CONNECTED if host_ok else RED
-        host_connected_style = False
-        if host_ok:
-            host_text = f"HOST connected -> {metrics.target_ip}:{metrics.target_port}"
-            host_connected_style = True
-        elif not host_fresh:
-            host_text = f"HOST checking -> {metrics.target_ip}:{metrics.target_port}"
-            host_color = YELLOW
-        else:
-            host_text = f"HOST disconnected -> {metrics.target_ip}:{metrics.target_port}"
         device_text = self.state.status_text.splitlines()[0]
         self.rounded_rect(28, 24, 1252, 126, 8, fill=SURFACE, outline=LINE, width=2)
         self.draw_rainbow_title(54, 48, "SUSTECH-ARES")
@@ -790,7 +773,7 @@ class ControllerPanel:
             anchor="w",
         )
         self.draw_status_pill(404, 40, 374, "DEVICE", device_text, device_color)
-        self.draw_status_pill(804, 40, 420, "LINK", host_text, host_color, connected_style=host_connected_style)
+        self.draw_link_panel(804, 32, 420, 80)
         if self.is_estop_active():
             detail_text = "ESTOP LOCKED - PRESS MENU TO RELEASE"
             detail_color = RED
@@ -883,24 +866,109 @@ class ControllerPanel:
             anchor="w",
         )
 
+    def host_status_rows(self) -> List[Dict[str, str]]:
+        now = time.monotonic()
+        host_snapshots = {ip: (reachable, checked_at) for ip, reachable, checked_at in self.host_monitor.snapshot_hosts()}
+        rows: List[Dict[str, str]] = []
+        for target in self.targets:
+            reachable, checked_at = host_snapshots.get(target.ip, (False, 0.0))
+            fresh = checked_at > 0.0 and now - checked_at <= 2.5
+            if reachable and fresh:
+                state = "connected"
+                color = HOST_CONNECTED
+            elif not fresh:
+                state = "checking"
+                color = YELLOW
+            else:
+                state = "disconnected"
+                color = RED
+            rows.append({"state": state, "color": color, "label": target.label()})
+        return rows
+
+    def draw_link_panel(self, x: float, y: float, width: float, height: float) -> None:
+        rows = self.host_status_rows()
+        total = len(rows)
+        connected = sum(1 for row in rows if row["state"] == "connected")
+        checking = sum(1 for row in rows if row["state"] == "checking")
+        if connected == total and total > 0:
+            outline = HOST_CONNECTED
+            fill = blend_color(PANEL_DARK, HOST_CONNECTED, 0.20)
+            title_color = HOST_CONNECTED
+        elif connected > 0 or checking > 0:
+            outline = YELLOW
+            fill = PANEL_DARK
+            title_color = YELLOW
+        else:
+            outline = RED
+            fill = DANGER_BG
+            title_color = RED
+
+        self.rounded_rect(x, y, x + width, y + height, 8, fill=fill, outline=outline, width=3)
+        self.canvas.create_text(
+            self.x(x + 18),
+            self.y(y + 16),
+            text=f"LINK {connected}/{total}",
+            fill=title_color,
+            font=("DejaVu Sans", 9, "bold"),
+            anchor="w",
+        )
+
+        visible_rows = rows[:2]
+        for index, row in enumerate(visible_rows):
+            row_y = y + 38 + index * 22
+            color = str(row["color"])
+            self.circle(x + 20, row_y, 5, fill=color, outline=color, width=1)
+            text = f"HOST {row['state']} -> {row['label']}"
+            self.canvas.create_text(
+                self.x(x + 36),
+                self.y(row_y),
+                text=text[:44],
+                fill=TEXT if row["state"] == "connected" else color,
+                font=("DejaVu Sans", 11, "bold"),
+                anchor="w",
+            )
+
+        if total > 2:
+            self.canvas.create_text(
+                self.x(x + width - 18),
+                self.y(y + 16),
+                text=f"+{total - 2} more",
+                fill=MUTED,
+                font=("DejaVu Sans", 9, "bold"),
+                anchor="e",
+            )
+
     def is_host_disconnected(self) -> bool:
-        host_reachable, host_checked_at = self.host_monitor.snapshot()
-        host_fresh = host_checked_at > 0.0 and time.monotonic() - host_checked_at <= 2.5
-        return host_fresh and not host_reachable
+        rows = self.host_status_rows()
+        return bool(rows) and all(row["state"] == "disconnected" for row in rows)
+
+    def is_host_degraded(self) -> bool:
+        rows = self.host_status_rows()
+        if not rows:
+            return False
+        connected = sum(1 for row in rows if row["state"] == "connected")
+        return 0 < connected < len(rows)
 
     def is_estop_active(self) -> bool:
         return bool(self.state.button_toggle.get(BUTTON_IDS["MENU"], False))
 
     def draw_host_disconnect_banner(self) -> None:
-        if not self.is_host_disconnected():
+        disconnected = self.is_host_disconnected()
+        degraded = self.is_host_degraded()
+        if not disconnected and not degraded:
             return
         pulse = 0.5 + 0.5 * math.sin(time.monotonic() * 7.0)
-        outline = blend_color(RED, ACTIVE_GLOW, pulse * 0.35)
-        self.rounded_rect(162, 132, 1118, 160, 8, fill=DANGER_BG, outline=outline, width=3)
+        base = RED if disconnected else YELLOW
+        fill = DANGER_BG if disconnected else WARN_BG
+        outline = blend_color(base, ACTIVE_GLOW, pulse * 0.35)
+        rows = self.host_status_rows()
+        connected = sum(1 for row in rows if row["state"] == "connected")
+        text = "HOST DISCONNECTED - OUTPUT ZEROED" if disconnected else f"HOST DEGRADED - {connected}/{len(rows)} CONNECTED"
+        self.rounded_rect(162, 132, 1118, 160, 8, fill=fill, outline=outline, width=3)
         self.canvas.create_text(
             self.x(640),
             self.y(146),
-            text="HOST DISCONNECTED - OUTPUT ZEROED",
+            text=text,
             fill=ACTIVE_TEXT,
             font=("DejaVu Sans", 15, "bold"),
         )

@@ -349,35 +349,47 @@ class TouchReader(threading.Thread):
 class HostReachabilityMonitor(threading.Thread):
     """后台 ping 目标主机，避免 UDP socket 在线但主机实际断开的假绿状态。"""
 
-    def __init__(self, target_ip: str, interval: float = 1.0) -> None:
+    def __init__(self, target_ip: str | list[str], interval: float = 1.0) -> None:
         super().__init__(daemon=True)
-        self.target_ip = target_ip
+        if isinstance(target_ip, str):
+            self.target_ips = [target_ip]
+        else:
+            self.target_ips = [str(item) for item in target_ip]
+        if not self.target_ips:
+            self.target_ips = ["127.0.0.1"]
+        self.target_ip = self.target_ips[0]
         self.interval = interval
         self.stop_event = threading.Event()
         self.lock = threading.Lock()
-        self.reachable = False
-        self.last_checked_at = 0.0
+        self.hosts: Dict[str, tuple[bool, float]] = {ip: (False, 0.0) for ip in self.target_ips}
 
     def stop(self) -> None:
         self.stop_event.set()
 
     def snapshot(self) -> tuple[bool, float]:
         with self.lock:
-            return self.reachable, self.last_checked_at
+            reachable = any(item[0] for item in self.hosts.values())
+            last_checked_at = max((item[1] for item in self.hosts.values()), default=0.0)
+            return reachable, last_checked_at
+
+    def snapshot_hosts(self) -> list[tuple[str, bool, float]]:
+        with self.lock:
+            return [(ip, reachable, checked_at) for ip, (reachable, checked_at) in self.hosts.items()]
 
     def run(self) -> None:
         while not self.stop_event.is_set():
-            reachable = self._ping_once()
+            now = time.monotonic()
+            results = [(ip, self._ping_once(ip), now) for ip in self.target_ips]
             with self.lock:
-                self.reachable = reachable
-                self.last_checked_at = time.monotonic()
+                for ip, reachable, checked_at in results:
+                    self.hosts[ip] = (reachable, checked_at)
             self.stop_event.wait(self.interval)
 
-    def _ping_once(self) -> bool:
+    def _ping_once(self, target_ip: str) -> bool:
         if platform.system().lower().startswith("win"):
-            command = ["ping", "-n", "1", "-w", "800", self.target_ip]
+            command = ["ping", "-n", "1", "-w", "800", target_ip]
         else:
-            command = ["ping", "-c", "1", "-W", "1", self.target_ip]
+            command = ["ping", "-c", "1", "-W", "1", target_ip]
         try:
             result = subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.5)
         except (OSError, subprocess.TimeoutExpired):
