@@ -190,6 +190,7 @@ class ControllerPanel:
             targets=self.targets,
             send_hz=send_hz,
             failsafe_timeout_ms=failsafe_timeout_ms,
+            target_enabled_provider=self.is_target_connected,
         )
 
         self.calibrating = False
@@ -884,6 +885,14 @@ class ControllerPanel:
                 color = RED
             rows.append({"state": state, "color": color, "label": target.label()})
         return rows
+
+    def is_target_connected(self, target: UdpTarget) -> bool:
+        now = time.monotonic()
+        for ip, reachable, checked_at in self.host_monitor.snapshot_hosts():
+            if ip != target.ip:
+                continue
+            return bool(reachable) and checked_at > 0.0 and now - checked_at <= 2.5
+        return False
 
     def draw_link_panel(self, x: float, y: float, width: float, height: float) -> None:
         rows = self.host_status_rows()

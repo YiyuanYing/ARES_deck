@@ -171,8 +171,10 @@ class ControllerUdpSender:
         send_hz: float = SEND_HZ,
         failsafe_timeout_ms: int = FAILSAFE_TIMEOUT_MS,
         print_status: bool = False,
+        target_enabled_provider: Callable[[UdpTarget], bool] | None = None,
     ) -> None:
         self.state_provider = state_provider or empty_state_snapshot
+        self.target_enabled_provider = target_enabled_provider
         self.local_ip = local_ip
         self.targets = normalize_udp_targets(targets, fallback_ip=target_ip, fallback_port=target_port)
         self.target_ip = self.targets[0].ip
@@ -309,8 +311,16 @@ class ControllerUdpSender:
             failsafe_timeout_ms=self.failsafe_timeout_ms,
         )
         successes = 0
+        skipped = 0
         errors: List[str] = []
         for index, target in enumerate(self.targets):
+            if self.target_enabled_provider is not None and not self.target_enabled_provider(target):
+                skipped += 1
+                with self.lock:
+                    if index < len(self.metrics.targets):
+                        self.metrics.targets[index].connected = False
+                        self.metrics.targets[index].last_error = "host not connected"
+                continue
             try:
                 self.sock.sendto(frame, target.control_addr)
             except OSError as exc:
@@ -333,6 +343,8 @@ class ControllerUdpSender:
         with self.lock:
             self.metrics.connected = successes > 0
             self.metrics.status_text = f"UDP binary -> {successes}/{len(self.targets)} targets"
+            if skipped:
+                self.metrics.status_text += f" ({skipped} skipped)"
             self.metrics.last_error = "; ".join(errors)
             self.metrics.tx_count += successes
             self.metrics.tx_rate = float(len(self.tx_window))

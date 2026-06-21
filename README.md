@@ -83,7 +83,7 @@ Steam Deck 发送端：
 
 ```bash
 conda activate controller
-python3 -m app.controller_panel --local-ip 10.20.12.220 --target-ip 10.20.99.23 --port 5005
+python3 -m app.controller_panel --local-ip 10.20.12.220 --target 10.20.99.23:5005:5006
 ```
 
 多目标 UDP 单播发送：
@@ -95,7 +95,7 @@ python3 -m app.controller_panel \
   --target 10.20.99.24:5005:5006
 ```
 
-多目标时，高频 `ControllerFrame V2` 会发送到每个 `IP:PORT`。Header 的 LINK 区域会按行显示各 host 状态；全部断开时显示红色断连警告，部分断开时显示 degraded 警告。目标地图 JSON 暂时仍只发到第一个目标的 `map_port`。
+多目标时，Header 的 LINK 区域会显示所有配置的 host；高频 `ControllerFrame V2` 只发送给当前 connected 的 host。全部断开时显示红色断连警告，部分断开时显示 degraded 警告。目标地图 JSON 暂时仍只发到第一个目标的 `map_port`。
 
 也可以使用启动脚本：
 
@@ -220,7 +220,6 @@ app 默认参数写在 `app/config/param.yaml`：
 ```yaml
 controller_panel:
   local_ip: "10.20.12.220"
-  remote_ip: "10.20.99.23"
   port: 5005
   map_port: 5006
   targets:
@@ -240,8 +239,6 @@ udp_receiver:
 
 udp_sender:
   local_ip: "10.20.12.220"
-  target_ip: "10.20.99.23"
-  target_port: 5005
   targets:
     - ip: "10.20.99.23"
       port: 5005
