@@ -28,6 +28,8 @@ def get_section(name: str, path: Path | None = None) -> Dict[str, Any]:
 def _parse_simple_yaml(text: str) -> Dict[str, Dict[str, Any]]:
     data: Dict[str, Dict[str, Any]] = {}
     current_section = ""
+    current_list_key = ""
+    current_list_item: Dict[str, Any] | None = None
 
     for raw_line in text.splitlines():
         line = raw_line.split("#", 1)[0].rstrip()
@@ -37,13 +39,46 @@ def _parse_simple_yaml(text: str) -> Dict[str, Dict[str, Any]]:
         if not line.startswith((" ", "\t")) and line.endswith(":"):
             current_section = line[:-1].strip()
             data[current_section] = {}
+            current_list_key = ""
+            current_list_item = None
             continue
 
-        if not current_section or ":" not in line:
+        if not current_section:
             continue
 
-        key, value = line.strip().split(":", 1)
-        data[current_section][key.strip()] = _parse_scalar(value.strip())
+        stripped = line.strip()
+        if stripped.startswith("- "):
+            if not current_list_key:
+                continue
+            item: Dict[str, Any] = {}
+            data[current_section][current_list_key].append(item)
+            current_list_item = item
+            remainder = stripped[2:].strip()
+            if ":" in remainder:
+                key, value = remainder.split(":", 1)
+                item[key.strip()] = _parse_scalar(value.strip())
+            continue
+
+        indent = len(line) - len(line.lstrip(" "))
+        if current_list_key and current_list_item is not None and indent >= 4 and ":" in stripped:
+            key, value = stripped.split(":", 1)
+            current_list_item[key.strip()] = _parse_scalar(value.strip())
+            continue
+
+        current_list_key = ""
+        current_list_item = None
+        if ":" not in stripped:
+            continue
+
+        key, value = stripped.split(":", 1)
+        key = key.strip()
+        value = value.strip()
+        if not value:
+            data[current_section][key] = []
+            current_list_key = key
+            current_list_item = None
+        else:
+            data[current_section][key] = _parse_scalar(value)
 
     return data
 

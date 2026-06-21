@@ -59,7 +59,7 @@ def parse_args() -> argparse.Namespace:
     params = get_section("controller_panel")
     parser = argparse.ArgumentParser(description="Steam Deck controller GUI + ControllerFrame V2 UDP sender.")
     parser.add_argument("--local-ip", default=params.get("local_ip", LOCAL_IP), help="Steam Deck LAN IP used for UDP bind.")
-    parser.add_argument("--remote-ip", "--target-ip", dest="remote_ip", default=params.get("remote_ip", TARGET_IP), help="Receiver LAN IP.")
+    parser.add_argument("--remote-ip", "--target-ip", dest="remote_ip", default=params.get("remote_ip", TARGET_IP), help=argparse.SUPPRESS)
     parser.add_argument("--port", type=int, default=params.get("port", TARGET_PORT), help="UDP receiver port.")
     parser.add_argument(
         "--map-port",
