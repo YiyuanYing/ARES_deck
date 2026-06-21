@@ -72,7 +72,6 @@ BUTTON_NAMES = {
     43: "ACTION_SELECT_2_LEFT",
     44: "ACTION_SELECT_2_MID",
     45: "ACTION_SELECT_2_RIGHT",
-    46: "ACTION_RELEASE",
     47: "ACTION_PLACE",
 }
 BUTTON_IDS = {name: button_id for button_id, name in BUTTON_NAMES.items()}

@@ -38,7 +38,6 @@ class ActionCommandDialog:
         self.on_close = on_close
         self.command_buttons: Dict[Tuple[int, str], tk.Button] = {}
         self.place_button: tk.Button | None = None
-        self.release_button: tk.Button | None = None
         self.status_label: tk.Label | None = None
         self.reset_after_id: str | None = None
         self.window = tk.Toplevel(parent)
@@ -121,21 +120,6 @@ class ActionCommandDialog:
         bottom_actions = tk.Frame(left_panel, bg=surface)
         bottom_actions.pack(fill=tk.X, side=tk.BOTTOM)
 
-        self.release_button = tk.Button(
-            bottom_actions,
-            text="RELEASE",
-            command=self.send_release,
-            bg=self.theme["danger_bg"],
-            fg=text,
-            activebackground=self.theme["danger"],
-            activeforeground=text,
-            relief=tk.FLAT,
-            font=(self.ui_font_family, 22, "bold"),
-            padx=28,
-            pady=22,
-        )
-        self.release_button.pack(fill=tk.X, pady=(0, 12))
-
         self.place_button = tk.Button(
             bottom_actions,
             text="PLACE",
@@ -200,9 +184,6 @@ class ActionCommandDialog:
     def send_place(self) -> None:
         self.send_simple_action("place", self.place_button, "PLACE")
 
-    def send_release(self) -> None:
-        self.send_simple_action("release", self.release_button, "RELEASE")
-
     def send_simple_action(self, action: str, button: tk.Button | None, label: str) -> None:
         if self.command_callback is not None:
             self.command_callback(action, None, None)
@@ -244,13 +225,6 @@ class ActionCommandDialog:
                 text="PLACE",
                 bg=self.theme["accent_bg"],
                 activebackground=self.theme["accent"],
-                fg=self.theme["text"],
-            )
-        if self.release_button is not None:
-            self.release_button.configure(
-                text="RELEASE",
-                bg=self.theme["danger_bg"],
-                activebackground=self.theme["danger"],
                 fg=self.theme["text"],
             )
 
