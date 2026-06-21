@@ -264,6 +264,9 @@ class ControllerPanel:
                     return
             except tk.TclError:
                 self.action_command_dialog = None
+            except Exception as exc:
+                print(f"[action-command] touch handler failed: {exc}")
+                self.action_command_dialog = None
 
         if self.map_editor_dialog is not None:
             try:
@@ -272,6 +275,9 @@ class ControllerPanel:
                         print(f"[touch] {source} hit map editor at ({screen_x:.1f},{screen_y:.1f})")
                     return
             except tk.TclError:
+                self.map_editor_dialog = None
+            except Exception as exc:
+                print(f"[map-editor] touch handler failed: {exc}")
                 self.map_editor_dialog = None
 
         sx, sy, _s = self.scale()

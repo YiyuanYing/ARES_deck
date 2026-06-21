@@ -38,8 +38,10 @@ class ActionCommandDialog:
         self.on_close = on_close
         self.command_buttons: Dict[Tuple[int, str], tk.Button] = {}
         self.place_button: tk.Button | None = None
+        self.close_button: tk.Button | None = None
         self.status_label: tk.Label | None = None
         self.reset_after_id: str | None = None
+        self.closed = False
         self.window = tk.Toplevel(parent)
         self.window.title("Target Action")
         self.window.configure(bg=self.theme["bg"])
@@ -47,6 +49,7 @@ class ActionCommandDialog:
         self.window.overrideredirect(True)
         self.window.protocol("WM_DELETE_WINDOW", self.cancel)
         self.window.resizable(False, False)
+        self.window.bind("<Escape>", lambda _event: self.cancel())
         self.window.withdraw()
 
         self.target_x = 0
@@ -95,6 +98,20 @@ class ActionCommandDialog:
             font=(self.mono_font_family, 11, "bold"),
         )
         self.status_label.pack(side=tk.LEFT, padx=(30, 0))
+        self.close_button = tk.Button(
+            title_bar,
+            text="CLOSE",
+            command=self.cancel,
+            bg=self.theme["surface_alt"],
+            fg=text,
+            activebackground=self.theme["danger"],
+            activeforeground=text,
+            relief=tk.FLAT,
+            font=(self.ui_font_family, 13, "bold"),
+            padx=16,
+            pady=8,
+        )
+        self.close_button.pack(side=tk.RIGHT)
 
         body = tk.Frame(card, bg=panel)
         body.pack(fill=tk.BOTH, expand=True)
@@ -313,11 +330,11 @@ class ActionCommandDialog:
         abs_x = self.parent.winfo_rootx() + int(screen_x)
         abs_y = self.parent.winfo_rooty() + int(screen_y)
 
+        if self.close_button is not None and self.widget_contains(self.close_button, abs_x, abs_y):
+            self.cancel()
+            return True
         if self.place_button is not None and self.widget_contains(self.place_button, abs_x, abs_y):
             self.send_place()
-            return True
-        if self.release_button is not None and self.widget_contains(self.release_button, abs_x, abs_y):
-            self.send_release()
             return True
 
         for (row, col), button in self.command_buttons.items():
@@ -338,6 +355,18 @@ class ActionCommandDialog:
         return x1 <= abs_x <= x2 and y1 <= abs_y <= y2
 
     def cancel(self) -> None:
+        if self.closed:
+            return
+        self.closed = True
+        if self.reset_after_id is not None:
+            try:
+                self.window.after_cancel(self.reset_after_id)
+            except tk.TclError:
+                pass
+            self.reset_after_id = None
         if self.on_close is not None:
             self.on_close()
-        self.window.destroy()
+        try:
+            self.window.destroy()
+        except tk.TclError:
+            pass
