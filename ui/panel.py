@@ -696,7 +696,7 @@ class ControllerPanel:
         normalized = max(-1.0, min(1.0, raw_corrected / 32767.0))
         if abs(normalized) < DEADZONE:
             return 0.0
-        return normalized
+        return -normalized
 
     def scale(self) -> Tuple[float, float, float]:
         width = max(self.canvas.winfo_width(), 1)

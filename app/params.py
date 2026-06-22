@@ -50,13 +50,16 @@ def _parse_simple_yaml(text: str) -> Dict[str, Dict[str, Any]]:
         if stripped.startswith("- "):
             if not current_list_key:
                 continue
-            item: Dict[str, Any] = {}
-            data[current_section][current_list_key].append(item)
-            current_list_item = item
             remainder = stripped[2:].strip()
             if ":" in remainder:
+                item: Dict[str, Any] = {}
+                data[current_section][current_list_key].append(item)
+                current_list_item = item
                 key, value = remainder.split(":", 1)
                 item[key.strip()] = _parse_scalar(value.strip())
+            else:
+                data[current_section][current_list_key].append(_parse_scalar(remainder))
+                current_list_item = None
             continue
 
         indent = len(line) - len(line.lstrip(" "))

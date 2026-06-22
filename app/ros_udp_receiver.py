@@ -60,6 +60,30 @@ ARRAY_AXIS_KEYS = AXIS_KEYS
 CONTROLLER_ARRAY_LENGTH = COMPACT_BUTTON_MASK_COUNT + len(ARRAY_AXIS_KEYS)
 
 
+def normalize_controller_topics(value: Any, fallback: str = DEFAULT_CONTROLLER_TOPIC) -> list[str]:
+    if value in (None, "", []):
+        raw_topics: list[Any] = []
+    elif isinstance(value, (list, tuple)):
+        raw_topics = list(value)
+    else:
+        raw_topics = [value]
+
+    topics: list[str] = []
+    seen: set[str] = set()
+    for item in raw_topics:
+        topic = str(item).strip()
+        if not topic or topic in seen:
+            continue
+        topics.append(topic)
+        seen.add(topic)
+
+    if topics:
+        return topics
+
+    fallback_topic = str(fallback).strip() or DEFAULT_CONTROLLER_TOPIC
+    return [fallback_topic]
+
+
 def parse_button_to_tx_id(value: Any) -> Dict[str, int]:
     if value in (None, "", {}):
         return {}
@@ -260,6 +284,7 @@ def format_debug_line(state: dict, controller_topic: str, publish_rate: float, c
 def parse_args() -> argparse.Namespace:
     params = get_section("ros_udp_receiver")
     parser = argparse.ArgumentParser(description="ROS2 ControllerFrame V2 UDP receiver publisher.")
+    parser.set_defaults(controller_topics=params.get("controller_topics"))
     parser.add_argument("--bind-ip", default=params.get("bind_ip", BIND_IP))
     parser.add_argument("--port", type=int, default=params.get("port", PORT))
     parser.add_argument("--publish-hz", type=float, default=params.get("publish_hz", CONTROL_HZ))
@@ -326,7 +351,14 @@ class ControllerRosPublisher:
         raw_mapping = parse_button_to_tx_id(args.button_to_tx_id)
         self.button_to_tx_id = filter_reserved_tx_id_mapping(raw_mapping, self.node.get_logger())
         self.receiver = ControllerUdpReceiver(bind_ip=args.bind_ip, port=args.port)
-        self.controller_pub = self.node.create_publisher(Float32MultiArray, args.controller_topic, 10)
+        self.controller_topics = normalize_controller_topics(
+            getattr(args, "controller_topics", None),
+            fallback=args.controller_topic,
+        )
+        self.controller_pubs = [
+            self.node.create_publisher(Float32MultiArray, topic, 10)
+            for topic in self.controller_topics
+        ]
         self.tx_id_pub = self.node.create_publisher(Int32, args.tx_id_topic, 10)
         self.command_action_enabled = bool(args.command_action_enabled)
         self.command_action_server = str(args.command_action_server)
@@ -349,13 +381,13 @@ class ControllerRosPublisher:
         self.publish_count = 0
         self.publish_window_start = time.monotonic()
         self.publish_rate = 0.0
-        self.controller_topic = str(args.controller_topic)
+        self.controller_topic = ",".join(self.controller_topics)
         self.tx_id_topic = str(args.tx_id_topic)
         self.configure_command_action()
         self.timer = self.node.create_timer(self.period, self.publish_once)
 
         self.node.get_logger().info(
-            f"publishing Float32MultiArray {args.controller_topic} at {1.0 / self.period:.1f}Hz, "
+            f"publishing Float32MultiArray {self.controller_topic} at {1.0 / self.period:.1f}Hz, "
             f"data_len={CONTROLLER_ARRAY_LENGTH}, layout=3_button_masks_plus_axes, axes_tail={ARRAY_AXIS_KEYS}, "
             f"tx_id topic {args.tx_id_topic}, mapped buttons={self.button_to_tx_id}, "
             f"tx_id sequence zero_frames={self.tx_id_zero_frames} value_frames={self.tx_id_value_frames}, "
@@ -392,7 +424,8 @@ class ControllerRosPublisher:
         state = self.receiver.update_state()
         message = self.Float32MultiArray()
         message.data = controller_array_from_state(state, self.button_to_tx_id.keys())
-        self.controller_pub.publish(message)
+        for controller_pub in self.controller_pubs:
+            controller_pub.publish(message)
         self.note_controller_published()
 
         for tx_id in rising_tx_ids(state, self.previous_buttons, self.button_to_tx_id):
