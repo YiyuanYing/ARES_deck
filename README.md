@@ -146,61 +146,40 @@ python3 -m app.ros_udp_receiver --no-debug-log-color
 
 ROS2 接收端会发布：
 
-- `/controller` (`std_msgs/msg/Float32MultiArray`): 完整遥控器状态。
-  - `data` 固定 51 个 float。
-  - `data[0..45]` 按协议 button ID 升序放按钮状态，未按下/未定义为 `0.0`，按下为 `1.0`。
-  - `ACTION_RELEASE` 已移除，不保留空洞；`ACTION_PLACE` 压缩到 `data[46]`。
-  - 已在 `button_to_tx_id` 中分配为 action 的按钮不会进入 `/controller`，对应位置保持 `0.0`，只通过 `/aruco_comm/tx_id` 和 `/command` 发送。
-  - `data[-4:] = [lx, ly, rx, ry]`，也就是 `data[47..50]` 放两对摇杆值。
+- `/controller` (`std_msgs/msg/Float32MultiArray`): 紧凑遥控器状态。
+  - `data` 固定 7 个 float，业务 payload 为 `7 * 4 = 28` 字节。
+  - `data[0..2]` 是 3 个 16-bit button bitmask，覆盖协议 button id `0..47`。
+  - `data[3..6] = [lx, ly, rx, ry]`，放两对摇杆值。
+  - 已在 `button_to_tx_id` 中分配为 action 的按钮不会进入 `/controller` bitmask，只通过 `/aruco_comm/tx_id` 和 `/command` 发送。
 
-`/controller.data` 索引表：
+`/controller.data` 紧凑布局：
 
-| Index | Name | Status |
-|---:|---|---|
-| 0 | LEFT_TRACKPAD | control |
-| 1 | RIGHT_TRACKPAD | control |
-| 2 | QUICK_ACCESS | UI/reserved, forced `0.0` |
-| 3 | A | control |
-| 4 | B | control |
-| 5 | X | control |
-| 6 | Y | control |
-| 7 | LB | control |
-| 8 | RB | control |
-| 9 | LT_FULL | control |
-| 10 | RT_FULL | control |
-| 11 | VIEW | control |
-| 12 | MENU | UI/safety, forced `0.0` |
-| 13 | STEAM | UI/safety, forced `0.0` |
-| 14 | L3 | control |
-| 15 | R3 | control |
-| 16 | DPAD_UP | control |
-| 17 | DPAD_DOWN | control |
-| 18 | DPAD_LEFT | control |
-| 19 | DPAD_RIGHT | control |
-| 20 | L4 | control |
-| 21 | R4 | control |
-| 22 | L5 | control |
-| 23 | R5 | control |
-| 24-31 | undefined | forced `0.0` |
-| 32 | VIRTUAL_BUTTON_1 | control |
-| 33 | VIRTUAL_BUTTON_2 | control |
-| 34 | VIRTUAL_BUTTON_3 | control |
-| 35 | VIRTUAL_BUTTON_4 | control |
-| 36 | VIRTUAL_BUTTON_5 | control |
-| 37 | VIRTUAL_BUTTON_6 | control |
-| 38 | VIRTUAL_BUTTON_7 | control |
-| 39 | VIRTUAL_BUTTON_8 | control |
-| 40 | ACTION_SELECT_3_LEFT | action occupied, forced `0.0` |
-| 41 | ACTION_SELECT_3_MID | action occupied, forced `0.0` |
-| 42 | ACTION_SELECT_3_RIGHT | action occupied, forced `0.0` |
-| 43 | ACTION_SELECT_2_LEFT | action occupied, forced `0.0` |
-| 44 | ACTION_SELECT_2_MID | action occupied, forced `0.0` |
-| 45 | ACTION_SELECT_2_RIGHT | action occupied, forced `0.0` |
-| 46 | ACTION_PLACE | action occupied, forced `0.0` |
-| 47 | lx | axis |
-| 48 | ly | axis |
-| 49 | rx | axis |
-| 50 | ry | axis |
+| Index | Meaning |
+|---:|---|
+| 0 | button bits `0..15` |
+| 1 | button bits `16..31` |
+| 2 | button bits `32..47` |
+| 3 | `lx` |
+| 4 | `ly` |
+| 5 | `rx` |
+| 6 | `ry` |
+
+按键解码示例：
+
+```python
+mask0 = int(msg.data[0])
+mask1 = int(msg.data[1])
+mask2 = int(msg.data[2])
+
+button_3_pressed = bool(mask0 & (1 << 3))    # A
+button_20_pressed = bool(mask1 & (1 << 4))   # L4
+button_47_pressed = bool(mask2 & (1 << 15))  # ACTION_PLACE
+
+lx = float(msg.data[3])
+ly = float(msg.data[4])
+rx = float(msg.data[5])
+ry = float(msg.data[6])
+```
 
 - `/aruco_comm/tx_id` (`std_msgs/msg/Int32`): 预留给按键到 ArUco tx id 的上升沿映射，默认不绑定任何键。
   - 触发后会先发布 3 帧 `0`，再发布 1 帧目标整数；多个触发会排队发送。
@@ -314,7 +293,7 @@ R1 receiver 收到后会校验尺寸和颜色编码，缓存 `latest_target_map`
 
 ### Target Action
 
-B 键动作窗口不再单独发送 JSON topic 或低频 action JSON。它和主界面 8 个虚拟键一样，映射成 `ControllerFrame V2` 的普通 button bit，并进入 ROS `/controller` Float32MultiArray 消息：
+B 键动作窗口不再单独发送 JSON topic 或低频 action JSON。它和主界面 8 个虚拟键一样，映射成 `ControllerFrame V2` 的普通 button bit，并进入 ROS `/controller` Float32MultiArray 的紧凑 bitmask：
 
 | ID | Protocol Name | Action |
 |---:|---|---|
@@ -326,7 +305,7 @@ B 键动作窗口不再单独发送 JSON topic 或低频 action JSON。它和主
 | 45 | ACTION_SELECT_2_RIGHT | `2 RIGHT` |
 | 47 | ACTION_PLACE | `PLACE` |
 
-点击 Target Action 弹窗按钮时，对应 button bit 会短暂置为 True；在 ROS 中表现为 `/controller.data` 的短脉冲。`ACTION_RELEASE` 不再输出，`ACTION_PLACE` 在数组中压缩为 `data[46]`。
+点击 Target Action 弹窗按钮时，对应 button bit 会短暂置为 True；在 ROS 中表现为 `/controller.data[2]` 对应 bit 的短脉冲。`ACTION_RELEASE` 不再输出，`ACTION_PLACE=47` 对应 `data[2]` 的 bit 15。
 
 | Offset | Size | Type | Name | Description |
 |---:|---:|---|---|---|

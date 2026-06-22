@@ -48,15 +48,16 @@ RESERVED_BUTTON_NAMES = frozenset(
         "MENU",
     }
 )
-CONTROLLER_BUTTON_COUNT = 47
+COMPACT_BUTTON_MASK_COUNT = 3
+COMPACT_BUTTON_BITS_PER_MASK = 16
+COMPACT_BUTTON_MAX_ID = COMPACT_BUTTON_MASK_COUNT * COMPACT_BUTTON_BITS_PER_MASK - 1
 ARRAY_BUTTON_INDEX_TO_NAME = {
     button_id: button_name
     for button_id, button_name in BUTTON_NAMES.items()
-    if 0 <= button_id <= 45
+    if 0 <= button_id <= COMPACT_BUTTON_MAX_ID
 }
-ARRAY_BUTTON_INDEX_TO_NAME[46] = "ACTION_PLACE"
 ARRAY_AXIS_KEYS = AXIS_KEYS
-CONTROLLER_ARRAY_LENGTH = CONTROLLER_BUTTON_COUNT + len(ARRAY_AXIS_KEYS)
+CONTROLLER_ARRAY_LENGTH = COMPACT_BUTTON_MASK_COUNT + len(ARRAY_AXIS_KEYS)
 
 
 def parse_button_to_tx_id(value: Any) -> Dict[str, int]:
@@ -123,15 +124,24 @@ def controller_axes_from_state(state: dict) -> list[float]:
     return [float(axes.get(axis_key, 0.0)) for axis_key in AXIS_KEYS]
 
 
-def controller_array_from_state(state: dict, excluded_buttons: Iterable[str] | None = None) -> list[float]:
+def controller_button_masks_from_state(state: dict, excluded_buttons: Iterable[str] | None = None) -> list[float]:
     state_buttons = state.get("buttons", {})
     excluded = set(excluded_buttons or ())
-    button_values = [0.0] * CONTROLLER_BUTTON_COUNT
-    for index, button_name in ARRAY_BUTTON_INDEX_TO_NAME.items():
+    masks = [0] * COMPACT_BUTTON_MASK_COUNT
+    for button_id, button_name in ARRAY_BUTTON_INDEX_TO_NAME.items():
         if button_name in excluded:
             continue
-        button_values[index] = 1.0 if bool(state_buttons.get(button_name, False)) else 0.0
-    return button_values + controller_axes_from_state(state)
+        if not bool(state_buttons.get(button_name, False)):
+            continue
+        if 0 <= button_id <= COMPACT_BUTTON_MAX_ID:
+            mask_index = button_id // COMPACT_BUTTON_BITS_PER_MASK
+            bit_index = button_id % COMPACT_BUTTON_BITS_PER_MASK
+            masks[mask_index] |= 1 << bit_index
+    return [float(mask) for mask in masks]
+
+
+def controller_array_from_state(state: dict, excluded_buttons: Iterable[str] | None = None) -> list[float]:
+    return controller_button_masks_from_state(state, excluded_buttons) + controller_axes_from_state(state)
 
 
 def import_action_type(type_path: str) -> Any:
@@ -346,7 +356,7 @@ class ControllerRosPublisher:
 
         self.node.get_logger().info(
             f"publishing Float32MultiArray {args.controller_topic} at {1.0 / self.period:.1f}Hz, "
-            f"data_len={CONTROLLER_ARRAY_LENGTH}, axes_tail={ARRAY_AXIS_KEYS}, "
+            f"data_len={CONTROLLER_ARRAY_LENGTH}, layout=3_button_masks_plus_axes, axes_tail={ARRAY_AXIS_KEYS}, "
             f"tx_id topic {args.tx_id_topic}, mapped buttons={self.button_to_tx_id}, "
             f"tx_id sequence zero_frames={self.tx_id_zero_frames} value_frames={self.tx_id_value_frames}, "
             f"command_action_enabled={self.command_action_enabled} server={self.command_action_server} "
