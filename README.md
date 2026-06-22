@@ -152,7 +152,7 @@ ROS2 接收端会发布：
   - `data[3..6] = [lx, ly, rx, ry]`，放两对摇杆值。
   - 已在 `button_to_tx_id` 中分配为 action 的按钮不会进入 `/controller` bitmask，只通过 `/aruco_comm/tx_id` 和 `/command` 发送。
   - `controller_topics` 可以配置多个类似 `/t0x0101_deck` 的 topic；每个 topic 都发布同一份 7 槽紧凑数据。
-  - 摇杆轴在控制面板 UI/UDP 源头和 ROS topic 输出侧都会按当前坐标约定取反；订阅端不要再次取反。
+  - 摇杆轴在 ROS topic 输出侧按当前坐标约定取反；控制面板 UI 显示保持手柄原方向，订阅端不要再次取反。
 
 多 topic 配置示例：
 
