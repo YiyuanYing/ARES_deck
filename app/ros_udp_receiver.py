@@ -145,7 +145,7 @@ def filter_reserved_tx_id_mapping(mapping: Dict[str, int], logger: Any | None = 
 
 def controller_axes_from_state(state: dict) -> list[float]:
     axes = state.get("axes", {})
-    return [float(axes.get(axis_key, 0.0)) for axis_key in AXIS_KEYS]
+    return [-float(axes.get(axis_key, 0.0)) for axis_key in AXIS_KEYS]
 
 
 def controller_button_masks_from_state(state: dict, excluded_buttons: Iterable[str] | None = None) -> list[float]:
