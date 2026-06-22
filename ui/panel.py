@@ -1028,7 +1028,7 @@ class ControllerPanel:
         self.canvas.create_text(
             self.x(cx - 2),
             self.y(cy + 12),
-            text=f"x={ax:+.2f}  y={ay:+.2f}",
+            text=f"x={-ax:+.2f}  y={-ay:+.2f}",
             fill=MUTED,
             font=("DejaVu Sans Mono", 9),
             anchor="w",
