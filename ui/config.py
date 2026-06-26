@@ -77,10 +77,10 @@ UI_COLOR_THEMES = {
     },
 }
 
-# Button activation mode:
-#   "toggle"    : press once -> True, press again -> False
-#   "momentary" : True only while the button is being held
-DEFAULT_BUTTON_ACTIVATION_MODE = "toggle"
+# 按键触发模式：
+#   "toggle"    : 点一次变 True，再点一次变 False
+#   "momentary" : 按住时为 True，松开后为 False
+DEFAULT_BUTTON_ACTIVATION_MODE = "momentary"
 BUTTON_ACTIVATION_MODES = ("toggle", "momentary")
 
 JS_EVENT_BUTTON = 0x01
@@ -266,9 +266,9 @@ DISPLAY_BUTTON_MAP = {
     },
 }
 
-# Physical button activation modes.
-# Change individual entries to "momentary" when you want press-and-hold behavior.
-# Entries here are merged into outgoing UDP button states by ControllerPanel.
+# 实体按键触发模式。
+# 默认是 momentary；如果某个键需要锁存，就在这里单独改成 "toggle"。
+# 这里的配置会被 ControllerPanel 合并到发出的 UDP 按键状态里。
 PHYSICAL_BUTTON_MODE_MAP = {
     2: "momentary",  # 快捷菜单键 / ...：按住有效；动作指令窗口打开时再次按下会临时退出
     3: DEFAULT_BUTTON_ACTIVATION_MODE,  # A 键
@@ -280,7 +280,7 @@ PHYSICAL_BUTTON_MODE_MAP = {
     9: DEFAULT_BUTTON_ACTIVATION_MODE,  # 左扳机全按 LT
     10: DEFAULT_BUTTON_ACTIVATION_MODE,  # 右扳机全按 RT
     11: DEFAULT_BUTTON_ACTIVATION_MODE,  # View / Select 键
-    12: DEFAULT_BUTTON_ACTIVATION_MODE,  # Menu / Start 键
+    12: "toggle",  # Menu / Start 键：本地 ESTOP 需要保持锁存
     13: "momentary",  # Steam 键：按住有效；地图编辑器打开时再次按下会临时退出
     14: DEFAULT_BUTTON_ACTIVATION_MODE,  # 左摇杆按下 L3
     15: DEFAULT_BUTTON_ACTIVATION_MODE,  # 右摇杆按下 R3

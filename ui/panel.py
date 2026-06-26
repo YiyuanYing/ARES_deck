@@ -365,7 +365,8 @@ class ControllerPanel:
         return mode if mode in {"toggle", "momentary"} else DEFAULT_BUTTON_ACTIVATION_MODE
 
     def press_virtual_button(self, button_id: int) -> None:
-        if self.virtual_button_mode(button_id) == "momentary":
+        mode = self.virtual_button_mode(button_id)
+        if mode == "momentary":
             self.set_virtual_button(button_id, True, "momentary")
             return
         self.toggle_virtual_button(button_id)
@@ -500,7 +501,7 @@ class ControllerPanel:
         if button_id is None:
             return
         self.virtual_button_until[button_id] = time.monotonic() + 0.25
-        print(f"[action-command] pulse button {button_id} {BUTTON_NAMES.get(button_id, action)}")
+        print(f"[action-command] action button {button_id} {BUTTON_NAMES.get(button_id, action)}")
 
     @staticmethod
     def action_command_button_id(action: str, row: int | None, col: str | None) -> int | None:
@@ -560,8 +561,7 @@ class ControllerPanel:
         self.root.after(REFRESH_MS, self.update_loop)
 
     def get_controller_snapshot(self) -> dict:
-        # UDP 发送锁存状态：实体键沿用按一下切换一次，屏幕虚拟键用中间大按钮切换。
-        # 边缘实体键绿色只表示当前 physical pressed，不影响原有实体键锁存发送逻辑。
+        # UDP 发送当前按键状态：momentary 按住有效，toggle 按一次锁存。
         now = time.monotonic()
         buttons = {
             button_id: self.state.button_toggle.get(button_id, False)
@@ -1072,7 +1072,7 @@ class ControllerPanel:
                 font=("DejaVu Sans Mono", 11, "bold"),
                 anchor="w",
             )
-            mode_label = "HOLD" if self.virtual_button_mode(button_id) == "momentary" else "TOGGLE"
+            mode_label = self.virtual_button_mode_label(button_id)
             self.canvas.create_text(
                 self.x(spec["x"] + spec["w"] - 18),
                 self.y(spec["y"] + 20),
@@ -1089,6 +1089,12 @@ class ControllerPanel:
                 font=("DejaVu Sans", 19 if "\n" in str(spec["label"]) else 21, "bold"),
                 justify="center",
             )
+
+    def virtual_button_mode_label(self, button_id: int) -> str:
+        mode = self.virtual_button_mode(button_id)
+        if mode == "momentary":
+            return "HOLD"
+        return "TOGGLE"
 
     def draw_footer(self) -> None:
         for action, spec in FOOTER_TOUCH_BUTTONS.items():

@@ -6,9 +6,9 @@ controller_panel:
     - ip: "192.168.1.50"
       port: 5005
       map_port: 5006
-    - ip: "192.168.1.51"
-      port: 5005
-      map_port: 5006
+    # - ip: "192.168.1.51"
+    #   port: 5005
+    #   map_port: 5006
   send_hz: 100.0
   failsafe_timeout_ms: 150
   touch_device: ""
@@ -33,9 +33,9 @@ udp_sender:
     - ip: "192.168.1.50"
       port: 5005
       map_port: 5006
-    - ip: "192.168.1.51"
-      port: 5005
-      map_port: 5006
+    # - ip: "192.168.1.51"
+    #   port: 5005
+    #   map_port: 5006
   send_hz: 100.0
   failsafe_timeout_ms: 150
 
@@ -44,8 +44,8 @@ ros_udp_receiver:
   port: 5005
   publish_hz: 100.0
   controller_topics:
-    - "/t0x0101_deck"
-    - "/t0x0102_deck"
+    - "/t0x0301_deck"
+    # - "/t0x0102_deck"
   tx_id_topic: "/aruco_comm/tx_id"
   tx_id_zero_frames: 3
   tx_id_value_frames: 1
