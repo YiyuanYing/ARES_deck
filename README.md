@@ -31,9 +31,6 @@ core/
   protocol.py           # ControllerFrame V2 打包、解析、CRC、axes/buttons/flags 编码
   udp_sender.py         # 固定频率 UDP 发送
   udp_receiver.py       # UDP 接收、latest_state、failsafe、ESTOP 状态
-
-ares_deck_interfaces/
-  action/Command.action # /command 使用的自定义 ROS2 Action 接口
 ```
 
 根目录只保留文档、依赖说明和启动脚本。Python 代码都放在 `app/`、`ui/`、`core/` 中。
@@ -110,16 +107,6 @@ conda activate controller
 python -m app.udp_receiver --bind-ip 0.0.0.0 --port 5005
 ```
 
-ROS2 Action 接口包：
-
-```bash
-colcon build --packages-select ares_deck_interfaces
-source install/setup.bash
-python3 -c "from ares_deck_interfaces.action import Command; print(Command)"
-```
-
-`/command` 的 action server 端也必须依赖并 source 同一个 `ares_deck_interfaces` 包。
-
 ROS2 接收端：
 
 ```bash
@@ -150,7 +137,7 @@ ROS2 接收端会发布：
   - `data` 固定 7 个 float，业务 payload 为 `7 * 4 = 28` 字节。
   - `data[0..2]` 是 3 个 16-bit button bitmask，覆盖协议 button id `0..47`。
   - `data[3..6] = [lx, ly, rx, ry]`，放两对摇杆值。
-  - 已在 `button_to_tx_id` 中分配为 action 的按钮不会进入 `/controller` bitmask，只通过 `/aruco_comm/tx_id` 和 `/command` 发送。
+  - 已在 `button_to_tx_id` 中分配为离散命令的按钮不会进入 `/controller` bitmask，只通过 `/aruco_comm/tx_id` 发送。
   - `controller_topics` 可以配置多个类似 `/t0x0101_deck` 的 topic；每个 topic 都发布同一份 7 槽紧凑数据。
   - 摇杆轴在 ROS topic 输出侧按当前坐标约定取反；控制面板 UI 显示保持手柄原方向，订阅端不要再次取反。
 
@@ -194,10 +181,6 @@ ry = float(msg.data[6])
 
 - `/aruco_comm/tx_id` (`std_msgs/msg/Int32`): 预留给按键到 ArUco tx id 的上升沿映射，默认不绑定任何键。
   - 触发后会先发布 3 帧 `0`，再发布 1 帧目标整数；多个触发会排队发送。
-- `/command` (`ares_deck_interfaces/action/Command`): 启用 `command_action_enabled` 后，每次 tx id 上升沿会同时发送一个 action goal。
-  - `goal.tx_id` 承载映射后的整数命令。
-  - result 为 `success/message`，feedback 为 `state`；当前发送端只依赖 goal 发送，不依赖 result 内容。
-  - action server 端必须依赖并使用同一个 `ares_deck_interfaces` 接口包。
 
 UI / 安全保留键不会被 `button_to_tx_id` 用作业务映射：
 

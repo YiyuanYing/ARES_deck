@@ -49,11 +49,6 @@ ros_udp_receiver:
   tx_id_topic: "/aruco_comm/tx_id"
   tx_id_zero_frames: 3
   tx_id_value_frames: 1
-  command_action_enabled: true
-  command_action_server: "/command"
-  command_action_type: "ares_deck_interfaces.action.Command"
-  command_goal_field: "tx_id"
-  command_wait_timeout_sec: 0.2
   debug_log: true
   debug_log_hz: 10.0
   debug_log_format: "block"

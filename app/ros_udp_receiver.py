@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import ast
-import importlib
 import json
 import sys
 import time
@@ -30,11 +29,6 @@ DEFAULT_DEBUG_LOG_FORMAT = "block"
 DEFAULT_DEBUG_LOG_COLOR = True
 DEFAULT_TX_ID_ZERO_FRAMES = 3
 DEFAULT_TX_ID_VALUE_FRAMES = 1
-DEFAULT_COMMAND_ACTION_SERVER = "/command"
-DEFAULT_COMMAND_ACTION_TYPE = "ares_deck_interfaces.action.Command"
-DEFAULT_COMMAND_GOAL_FIELD = "tx_id"
-DEFAULT_COMMAND_WAIT_TIMEOUT_SEC = 0.2
-DEFAULT_COMMAND_ACTION_ENABLED = True
 ANSI_RESET = "\033[0m"
 ANSI_DIM = "\033[2m"
 ANSI_GREEN = "\033[92m"
@@ -166,14 +160,6 @@ def controller_button_masks_from_state(state: dict, excluded_buttons: Iterable[s
 
 def controller_array_from_state(state: dict, excluded_buttons: Iterable[str] | None = None) -> list[float]:
     return controller_button_masks_from_state(state, excluded_buttons) + controller_axes_from_state(state)
-
-
-def import_action_type(type_path: str) -> Any:
-    module_name, _, class_name = str(type_path).rpartition(".")
-    if not module_name or not class_name:
-        raise ValueError(f"invalid action type path: {type_path!r}")
-    module = importlib.import_module(module_name)
-    return getattr(module, class_name)
 
 
 def rising_tx_ids(state: dict, previous_buttons: Dict[str, bool], mapping: Dict[str, int]) -> list[int]:
@@ -315,27 +301,12 @@ def parse_args() -> argparse.Namespace:
         default=params.get("button_to_tx_id", "{}"),
         help='JSON dict mapping button names/ids to Int32 values, e.g. \'{"A": 1, "RB": 2}\'.',
     )
-    parser.add_argument(
-        "--command-action-enabled",
-        action=argparse.BooleanOptionalAction,
-        default=params.get("command_action_enabled", DEFAULT_COMMAND_ACTION_ENABLED),
-        help="Also send mapped tx_id values as custom ROS2 action goals.",
-    )
-    parser.add_argument("--command-action-server", default=params.get("command_action_server", DEFAULT_COMMAND_ACTION_SERVER))
-    parser.add_argument("--command-action-type", default=params.get("command_action_type", DEFAULT_COMMAND_ACTION_TYPE))
-    parser.add_argument("--command-goal-field", default=params.get("command_goal_field", DEFAULT_COMMAND_GOAL_FIELD))
-    parser.add_argument(
-        "--command-wait-timeout-sec",
-        type=float,
-        default=params.get("command_wait_timeout_sec", DEFAULT_COMMAND_WAIT_TIMEOUT_SEC),
-    )
     return parser.parse_args()
 
 
 class ControllerRosPublisher:
     def __init__(self, args: argparse.Namespace) -> None:
         import rclpy
-        from rclpy.action import ActionClient
         from rclpy.node import Node
         from std_msgs.msg import Float32MultiArray
         from std_msgs.msg import Int32
@@ -344,7 +315,6 @@ class ControllerRosPublisher:
             pass
 
         self.rclpy = rclpy
-        self.ActionClient = ActionClient
         self.Float32MultiArray = Float32MultiArray
         self.Int32 = Int32
         self.node = _Node("controller_udp_receiver")
@@ -360,14 +330,6 @@ class ControllerRosPublisher:
             for topic in self.controller_topics
         ]
         self.tx_id_pub = self.node.create_publisher(Int32, args.tx_id_topic, 10)
-        self.command_action_enabled = bool(args.command_action_enabled)
-        self.command_action_server = str(args.command_action_server)
-        self.command_action_type_path = str(args.command_action_type)
-        self.command_goal_field = str(args.command_goal_field)
-        self.command_wait_timeout_sec = max(float(args.command_wait_timeout_sec), 0.0)
-        self.command_action_type: Any | None = None
-        self.command_action_client: Any | None = None
-        self.command_goal_futures: set[Any] = set()
         self.previous_buttons: Dict[str, bool] = {}
         self.tx_id_queue: Deque[int] = deque()
         self.tx_id_zero_frames = max(int(args.tx_id_zero_frames), 0)
@@ -383,7 +345,6 @@ class ControllerRosPublisher:
         self.publish_rate = 0.0
         self.controller_topic = ",".join(self.controller_topics)
         self.tx_id_topic = str(args.tx_id_topic)
-        self.configure_command_action()
         self.timer = self.node.create_timer(self.period, self.publish_once)
 
         self.node.get_logger().info(
@@ -391,27 +352,8 @@ class ControllerRosPublisher:
             f"data_len={CONTROLLER_ARRAY_LENGTH}, layout=3_button_masks_plus_axes, axes_tail={ARRAY_AXIS_KEYS}, "
             f"tx_id topic {args.tx_id_topic}, mapped buttons={self.button_to_tx_id}, "
             f"tx_id sequence zero_frames={self.tx_id_zero_frames} value_frames={self.tx_id_value_frames}, "
-            f"command_action_enabled={self.command_action_enabled} server={self.command_action_server} "
-            f"type={self.command_action_type_path} field={self.command_goal_field}, "
             f"debug_log={self.debug_log} format={self.debug_log_format} color={self.debug_log_color}"
         )
-
-    def configure_command_action(self) -> None:
-        if not self.command_action_enabled:
-            return
-        try:
-            self.command_action_type = import_action_type(self.command_action_type_path)
-            self.command_action_client = self.ActionClient(
-                self.node,
-                self.command_action_type,
-                self.command_action_server,
-            )
-        except Exception as exc:
-            self.command_action_enabled = False
-            self.node.get_logger().error(
-                f"disabled command action: cannot load {self.command_action_type_path} "
-                f"for {self.command_action_server}: {exc}"
-            )
 
     def start(self) -> None:
         self.receiver.start()
@@ -430,7 +372,6 @@ class ControllerRosPublisher:
 
         for tx_id in rising_tx_ids(state, self.previous_buttons, self.button_to_tx_id):
             self.enqueue_tx_id(tx_id)
-            self.send_command_action(tx_id)
         self.previous_buttons = snapshot_buttons(state, self.button_to_tx_id.keys())
         self.publish_next_tx_id()
         self.log_debug_state(state)
@@ -448,55 +389,6 @@ class ControllerRosPublisher:
         message.data = int(tx_id)
         self.tx_id_pub.publish(message)
         self.node.get_logger().info(f"published {self.tx_id_topic}: {tx_id} queue={len(self.tx_id_queue)}")
-
-    def send_command_action(self, tx_id: int) -> None:
-        if not self.command_action_enabled or self.command_action_client is None or self.command_action_type is None:
-            return
-        try:
-            if not self.command_action_client.wait_for_server(timeout_sec=self.command_wait_timeout_sec):
-                self.node.get_logger().error(
-                    f"command action server unavailable: {self.command_action_server} "
-                    f"timeout={self.command_wait_timeout_sec:.3f}s tx_id={tx_id}"
-                )
-                return
-
-            goal = self.command_action_type.Goal()
-            if not hasattr(goal, self.command_goal_field):
-                self.node.get_logger().error(
-                    f"command action goal {self.command_action_type_path}.Goal has no field "
-                    f"{self.command_goal_field!r}; dropped tx_id={tx_id}"
-                )
-                return
-            setattr(goal, self.command_goal_field, int(tx_id))
-            future = self.command_action_client.send_goal_async(goal)
-            self.command_goal_futures.add(future)
-            future.add_done_callback(lambda done_future, sent_tx_id=int(tx_id): self.handle_command_goal_response(done_future, sent_tx_id))
-            self.node.get_logger().info(f"sent {self.command_action_server} goal {self.command_goal_field}={tx_id}")
-        except Exception as exc:
-            self.node.get_logger().error(f"failed to send {self.command_action_server} action goal tx_id={tx_id}: {exc}")
-
-    def handle_command_goal_response(self, future: Any, tx_id: int) -> None:
-        self.command_goal_futures.discard(future)
-        try:
-            goal_handle = future.result()
-        except Exception as exc:
-            self.node.get_logger().error(f"{self.command_action_server} goal tx_id={tx_id} failed before acceptance: {exc}")
-            return
-
-        if not getattr(goal_handle, "accepted", False):
-            self.node.get_logger().error(f"{self.command_action_server} rejected goal tx_id={tx_id}")
-            return
-
-        result_future = goal_handle.get_result_async()
-        self.command_goal_futures.add(result_future)
-        result_future.add_done_callback(lambda done_future, sent_tx_id=int(tx_id): self.handle_command_result(done_future, sent_tx_id))
-
-    def handle_command_result(self, future: Any, tx_id: int) -> None:
-        self.command_goal_futures.discard(future)
-        try:
-            future.result()
-        except Exception as exc:
-            self.node.get_logger().error(f"{self.command_action_server} result tx_id={tx_id} failed: {exc}")
 
     def note_controller_published(self) -> None:
         now = time.monotonic()

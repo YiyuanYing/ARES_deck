@@ -1,6 +1,0 @@
-int32 tx_id
----
-bool success
-string message
----
-string state
