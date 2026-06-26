@@ -53,4 +53,4 @@ ros_udp_receiver:
   debug_log_hz: 10.0
   debug_log_format: "block"
   debug_log_color: true
-  button_to_tx_id: '{"ACTION_SELECT_3_LEFT": 1, "ACTION_SELECT_3_MID": 2, "ACTION_SELECT_3_RIGHT": 3, "ACTION_SELECT_2_LEFT": 4, "ACTION_SELECT_2_MID": 5, "ACTION_SELECT_2_RIGHT": 6, "ACTION_PLACE": 7}'
+  button_to_tx_id: '{"ACTION_SELECT_3_LEFT": 1, "ACTION_SELECT_3_MID": 2, "ACTION_SELECT_3_RIGHT": 3, "ACTION_SELECT_2_LEFT": 4, "ACTION_SELECT_2_MID": 5, "ACTION_SELECT_2_RIGHT": 6, "ACTION_PLACE": 7, "ACTION_BUILD": 8}'

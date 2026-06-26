@@ -506,6 +506,8 @@ class ControllerPanel:
     def action_command_button_id(action: str, row: int | None, col: str | None) -> int | None:
         if action == "place":
             return BUTTON_IDS["ACTION_PLACE"]
+        if action == "build":
+            return BUTTON_IDS["ACTION_BUILD"]
         if action != "select" or row is None or col is None:
             return None
         key = f"ACTION_SELECT_{int(row)}_{str(col).upper()}"

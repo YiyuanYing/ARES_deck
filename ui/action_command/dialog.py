@@ -37,6 +37,7 @@ class ActionCommandDialog:
         self.command_callback = command_callback
         self.on_close = on_close
         self.command_buttons: Dict[Tuple[int, str], tk.Button] = {}
+        self.build_button: tk.Button | None = None
         self.place_button: tk.Button | None = None
         self.close_button: tk.Button | None = None
         self.status_label: tk.Label | None = None
@@ -135,7 +136,22 @@ class ActionCommandDialog:
         ).pack(anchor="w", pady=(14, 0))
 
         bottom_actions = tk.Frame(left_panel, bg=surface)
-        bottom_actions.pack(fill=tk.X, side=tk.BOTTOM)
+        bottom_actions.pack(fill=tk.BOTH, expand=True, side=tk.BOTTOM, pady=(24, 0))
+
+        self.build_button = tk.Button(
+            bottom_actions,
+            text="BUILD",
+            command=self.send_build,
+            bg=self.theme["surface_alt"],
+            fg=text,
+            activebackground=self.theme["accent"],
+            activeforeground=text,
+            relief=tk.FLAT,
+            font=(self.ui_font_family, 24, "bold"),
+            padx=30,
+            pady=30,
+        )
+        self.build_button.pack(fill=tk.BOTH, expand=True, pady=(0, 14))
 
         self.place_button = tk.Button(
             bottom_actions,
@@ -148,9 +164,9 @@ class ActionCommandDialog:
             relief=tk.FLAT,
             font=(self.ui_font_family, 24, "bold"),
             padx=30,
-            pady=26,
+            pady=30,
         )
-        self.place_button.pack(fill=tk.X)
+        self.place_button.pack(fill=tk.BOTH, expand=True)
 
         center_panel = tk.Frame(body, bg=panel, padx=20)
         center_panel.grid(row=0, column=1, sticky="nsew")
@@ -201,6 +217,9 @@ class ActionCommandDialog:
     def send_place(self) -> None:
         self.send_simple_action("place", self.place_button, "PLACE")
 
+    def send_build(self) -> None:
+        self.send_simple_action("build", self.build_button, "BUILD")
+
     def send_simple_action(self, action: str, button: tk.Button | None, label: str) -> None:
         if self.command_callback is not None:
             self.command_callback(action, None, None)
@@ -237,6 +256,13 @@ class ActionCommandDialog:
                     activebackground=self.theme["surface_alt"],
                     fg=self.theme["text"],
                 )
+        if self.build_button is not None:
+            self.build_button.configure(
+                text="BUILD",
+                bg=self.theme["surface_alt"],
+                activebackground=self.theme["accent"],
+                fg=self.theme["text"],
+            )
         if self.place_button is not None:
             self.place_button.configure(
                 text="PLACE",
@@ -332,6 +358,9 @@ class ActionCommandDialog:
 
         if self.close_button is not None and self.widget_contains(self.close_button, abs_x, abs_y):
             self.cancel()
+            return True
+        if self.build_button is not None and self.widget_contains(self.build_button, abs_x, abs_y):
+            self.send_build()
             return True
         if self.place_button is not None and self.widget_contains(self.place_button, abs_x, abs_y):
             self.send_place()

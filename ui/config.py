@@ -23,7 +23,7 @@ UDP_SEND_HZ = SEND_HZ
 MAP_EDITOR_TRIGGER_BUTTON_ID = 13  # Steam 键：按下会打开目标地图编辑器。
 ACTION_COMMAND_TRIGGER_BUTTON_ID = 2  # 快捷菜单键 / ...：按下会打开动作指令窗口。
 
-UI_COLOR_THEME = "burgundy"  # 可选: "burgundy" 酒红色, "midnight_blue" 墨蓝色
+UI_COLOR_THEME = "midnight_blue"  # 可选: "burgundy" 酒红色, "midnight_blue" 墨蓝色
 UI_COLOR_THEMES = {
     "burgundy": {
         "bg": "#130b10",
