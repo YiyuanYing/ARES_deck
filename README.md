@@ -138,7 +138,7 @@ ROS2 接收端会发布：
   - `data[0..2]` 是 3 个 16-bit button bitmask，覆盖协议 button id `0..47`。
   - `data[3..6] = [lx, ly, rx, ry]`，放两对摇杆值。
   - 已在 `button_to_tx_id` 中分配为离散命令的按钮不会进入 `/controller` bitmask，只通过 `/aruco_comm/tx_id` 发送。
-  - `controller_topics` 可以配置多个类似 `/t0x0101_deck` 的 topic；每个 topic 都发布同一份 7 槽紧凑数据。
+  - `controller_topics` 可以配置多个类似 `/t0x0301_deck` 的 topic；每个 topic 都发布同一份 7 槽紧凑数据。
   - 摇杆轴在 ROS topic 输出侧按当前坐标约定取反；控制面板 UI 显示保持手柄原方向，订阅端不要再次取反。
 
 多 topic 配置示例：
@@ -146,7 +146,7 @@ ROS2 接收端会发布：
 ```yaml
 ros_udp_receiver:
   controller_topics:
-    - "/t0x0101_deck"
+    - "/t0x0301_deck"
     # - "/t0x0102_deck"
 ```
 
