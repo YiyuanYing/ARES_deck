@@ -115,8 +115,22 @@ ROS2 接收端一键启动：
 
 该脚本会先加载 ROS2 环境和本仓库 `install/setup.bash`，然后同时启动：
 
-- `python3 -m app.ros_udp_receiver`: 接收 Steam Deck UDP、解码 `ControllerFrame V2`，发布 `/t0x0301_deck` 和 `/aruco_comm/tx_id`。
+- `python3 -m app.ros_udp_receiver`: 接收 Steam Deck UDP、解码 `ControllerFrame V2`，发布 `/t0x0303_deck` 和 `/aruco_comm/tx_id`。
 - `ros2 launch ares_usb comm_bringup.launch.py`: 启动 `ares_usb` USB 透传节点，动态订阅 `t0x....` 的 `Float32MultiArray` topic，并按 topic 里的十六进制 DataID 发送到下位机。
+
+`ares_usb` 是接收端的 ROS2 USB 透传包。它会扫描所有 `t0x....` 形式的 `std_msgs/msg/Float32MultiArray` topic，例如 `/t0x0303_deck` 会被解析为 DataID `0x0303`，并按高字节 `0x03` 路由到对应 USB 设备。下位机上报的 DataID 会反向发布成 `/r0x....` topic。
+
+首次部署或修改 `ares_usb` 后，先编译并加载本仓库工作区：
+
+```bash
+cd ~/ARES_deck
+source /opt/ros/humble/setup.bash
+colcon build --packages-select ares_usb
+source install/setup.bash
+ros2 pkg prefix ares_usb
+```
+
+最后一行能输出类似 `~/ARES_deck/install/ares_usb` 就说明包已经可被 `ros2 launch` 找到。
 
 如果只想单独调试 UDP 解码节点，也可以直接运行：
 
@@ -149,7 +163,7 @@ ROS2 接收端会发布：
   - `data[0..2]` 是 3 个 16-bit button bitmask，覆盖协议 button id `0..47`。
   - `data[3..6] = [lx, ly, rx, ry]`，放两对摇杆值。
   - 已在 `button_to_tx_id` 中分配为离散命令的按钮不会进入 `/controller` bitmask，只通过 `/aruco_comm/tx_id` 发送。
-  - `controller_topics` 可以配置多个类似 `/t0x0301_deck` 的 topic；每个 topic 都发布同一份 7 槽紧凑数据。
+  - `controller_topics` 可以配置多个类似 `/t0x0303_deck` 的 topic；每个 topic 都发布同一份 7 槽紧凑数据。
   - 摇杆轴在 ROS topic 输出侧按当前坐标约定取反；控制面板 UI 显示保持手柄原方向，订阅端不要再次取反。
 
 多 topic 配置示例：
@@ -157,7 +171,7 @@ ROS2 接收端会发布：
 ```yaml
 ros_udp_receiver:
   controller_topics:
-    - "/t0x0301_deck"
+    - "/t0x0303_deck"
     # - "/t0x0102_deck"
 ```
 

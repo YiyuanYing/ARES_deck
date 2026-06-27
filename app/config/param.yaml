@@ -44,7 +44,7 @@ ros_udp_receiver:
   port: 5005
   publish_hz: 100.0
   controller_topics:
-    - "/t0x0301_deck"
+    - "/t0x0303_deck"
     # - "/t0x0102_deck"
   tx_id_topic: "/aruco_comm/tx_id"
   tx_id_zero_frames: 3
