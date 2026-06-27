@@ -29,8 +29,8 @@ public:
     {
         RCLCPP_INFO(this->get_logger(), "UsbPassthroughNode starting...");
 
-        add_board_route(0x0001, 0x03);
-        add_board_route(0x0002, 0x02);
+        add_board(0x0001);
+        add_board(0x0002);
 
         // 定时器 1: 动态发现下发 (TX) 话题 (1Hz)
         topic_discovery_timer_ = this->create_wall_timer(
@@ -54,55 +54,38 @@ public:
 private:
     struct BoardRoute
     {
-        BoardRoute(uint16_t usb_pid, uint8_t data_id_prefix)
-            : pid(usb_pid), prefix(data_id_prefix), protocol(usb_pid)
+        explicit BoardRoute(uint16_t usb_pid)
+            : pid(usb_pid), protocol(usb_pid)
         {
         }
 
         uint16_t pid;
-        uint8_t prefix;
         ares::Protocol protocol;
     };
 
-    static uint8_t data_id_prefix(uint16_t data_id)
+    void add_board(uint16_t pid)
     {
-        return static_cast<uint8_t>((data_id >> 8) & 0xFF);
-    }
-
-    void add_board_route(uint16_t pid, uint8_t prefix)
-    {
-        auto board = std::make_unique<BoardRoute>(pid, prefix);
+        auto board = std::make_unique<BoardRoute>(pid);
         BoardRoute *board_ptr = board.get();
 
         board_ptr->protocol.register_sync_callback(
-            [this, board_ptr](uint16_t data_id, const uint8_t *data, size_t len) {
-                handle_passthrough_rx(board_ptr, data_id, data, len);
+            [this](uint16_t data_id, const uint8_t *data, size_t len) {
+                handle_passthrough_rx(data_id, data, len);
             });
 
         if (!board_ptr->protocol.connect()) {
             RCLCPP_ERROR(
                 this->get_logger(),
-                "Failed to connect USB device PID=0x%04X for DataID prefix 0x%02X, node will keep running but this route is inactive.",
-                pid, prefix);
+                "Failed to connect USB device PID=0x%04X, node will keep running but this board is inactive.",
+                pid);
         } else {
             RCLCPP_INFO(
                 this->get_logger(),
-                "USB route ready: PID=0x%04X <--> DataID 0x%02Xxx.",
-                pid, prefix);
+                "USB broadcast target ready: PID=0x%04X.",
+                pid);
         }
 
         boards_.push_back(std::move(board));
-    }
-
-    BoardRoute *find_board_for_data_id(uint16_t data_id)
-    {
-        uint8_t prefix = data_id_prefix(data_id);
-        for (auto& board : boards_) {
-            if (board->prefix == prefix) {
-                return board.get();
-            }
-        }
-        return nullptr;
     }
 
     // ---------------- 动态透传功能 (ROS2 -> 下位机 TX) ------------------------
@@ -156,20 +139,11 @@ private:
         if (float_count == 0) return;
 
         size_t byte_len = float_count * 4;
-        BoardRoute *board = find_board_for_data_id(id);
-        if (!board) {
-            RCLCPP_ERROR(
-                this->get_logger(),
-                "No USB route for DataID 0x%04X from topic '%s'. Drop passthrough data.",
-                id, topic_name.c_str());
-            return;
-        }
-
         if (tx_known_lengths_.find(id) == tx_known_lengths_.end() || tx_known_lengths_[id] != byte_len) {
             RCLCPP_INFO(
                 this->get_logger(),
-                "✅ [TX Data] Topic: '%s' ---> PID=0x%04X DataID=0x%04X | %zu Bytes",
-                topic_name.c_str(), board->pid, id, byte_len);
+                "✅ [TX Broadcast] Topic: '%s' ---> PID=0x0001,0x0002 DataID=0x%04X | %zu Bytes",
+                topic_name.c_str(), id, byte_len);
             tx_known_lengths_[id] = byte_len; 
         }
 
@@ -183,9 +157,14 @@ private:
             payload[i * 4 + 3] = float_bytes[3];
         }
 
-        if (!board->protocol.send_sync(id, payload.data(), payload.size()))
-        {
-            RCLCPP_ERROR(this->get_logger(), "Failed to TX passthrough data. PID=0x%04X DataID=0x%04X", board->pid, id);
+        for (auto& board : boards_) {
+            if (!board->protocol.send_sync(id, payload.data(), payload.size()))
+            {
+                RCLCPP_ERROR(
+                    this->get_logger(),
+                    "Failed to TX broadcast data. PID=0x%04X DataID=0x%04X",
+                    board->pid, id);
+            }
         }
     }
 
@@ -193,17 +172,9 @@ private:
     /**
      * @brief USB 接收回调。只做数据转换和发布，绝对不执行阻塞操作 (完美复刻 UsbBridgeNode 逻辑)
      */
-    void handle_passthrough_rx(BoardRoute *board, uint16_t data_id, const uint8_t *data, size_t len)
+    void handle_passthrough_rx(uint16_t data_id, const uint8_t *data, size_t len)
     {
         if (len % 4 != 0) return;
-        if (data_id_prefix(data_id) != board->prefix) {
-            RCLCPP_WARN(
-                this->get_logger(),
-                "Drop RX passthrough data from PID=0x%04X: DataID 0x%04X does not match prefix 0x%02X.",
-                board->pid, data_id, board->prefix);
-            return;
-        }
-
         rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr pub = nullptr;
         
         // 快速查找是否已经建立了该 ID 的发布通道
