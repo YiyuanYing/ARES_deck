@@ -100,6 +100,20 @@ python3 -m app.controller_panel \
 ./start_controller.sh
 ```
 
+不启动 GUI、循环模拟实体 `A` 键时：
+
+```bash
+conda activate controller
+python -m app.simulate_controller
+```
+
+模拟器默认按现有 `udp_sender` 配置发送，每个 1 秒周期按下 0.5 秒、松开 0.5 秒。可以通过名称或协议 ID 更换按钮：
+
+```bash
+python -m app.simulate_controller --button B
+python -m app.simulate_controller --button 4
+```
+
 接收端：
 
 ```powershell
