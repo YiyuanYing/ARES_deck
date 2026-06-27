@@ -90,19 +90,19 @@ JS_EVENT_SIZE = 8
 
 # 屏幕虚拟按键；修改各条目的 mode 可以单独调整触发方式。
 VIRTUAL_BUTTON_MAP = {
-    32: {"name": "SBUS2 M3508 Left Extend", "label": "LEFT EXT", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 182, "y": 170, "w": 200, "h": 128, "radius": 8},
-    33: {"name": "SBUS2 M3508 Center Extend", "label": "CENTER EXT", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 419, "y": 170, "w": 200, "h": 128, "radius": 8},
-    34: {"name": "SBUS2 M3508 Right Extend", "label": "RIGHT EXT", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 656, "y": 170, "w": 200, "h": 128, "radius": 8},
-    35: {"name": "SBUS2 M2006 Left Down", "label": "LEFT DOWN", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 893, "y": 170, "w": 200, "h": 128, "radius": 8},
-    36: {"name": "SBUS2 M2006 Right Down", "label": "RIGHT DOWN", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 182, "y": 318, "w": 200, "h": 128, "radius": 8},
-    37: {"name": "SBUS2 Relay Left", "label": "RELAY LEFT", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 419, "y": 318, "w": 200, "h": 128, "radius": 8},
-    38: {"name": "SBUS2 Relay Center", "label": "RELAY CENTER", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 656, "y": 318, "w": 200, "h": 128, "radius": 8},
-    39: {"name": "SBUS2 Relay Right", "label": "RELAY RIGHT", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 893, "y": 318, "w": 200, "h": 128, "radius": 8},
-    40: {"name": "R1 Catch Prepare", "label": "PREPARE", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 182, "y": 466, "w": 160, "h": 128, "radius": 8},
-    41: {"name": "R1 Catch Raise", "label": "RAISE", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 370, "y": 466, "w": 160, "h": 128, "radius": 8},
-    42: {"name": "R1 Catch Attack", "label": "ATTACK", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 558, "y": 466, "w": 160, "h": 128, "radius": 8},
-    46: {"name": "R1 Catch Release", "label": "RELEASE", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 746, "y": 466, "w": 160, "h": 128, "radius": 8},
-    47: {"name": "R1 Catch Seize", "label": "SEIZE", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 934, "y": 466, "w": 160, "h": 128, "radius": 8},
+    32: {"name": "SBUS2 M3508 Left Extend", "label": "LEFT EXT", "group": "SBUS_2", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 182, "y": 190, "w": 200, "h": 120, "radius": 8},
+    33: {"name": "SBUS2 M3508 Center Extend", "label": "CENTER EXT", "group": "SBUS_2", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 419, "y": 190, "w": 200, "h": 120, "radius": 8},
+    34: {"name": "SBUS2 M3508 Right Extend", "label": "RIGHT EXT", "group": "SBUS_2", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 656, "y": 190, "w": 200, "h": 120, "radius": 8},
+    35: {"name": "SBUS2 M2006 Left Down", "label": "LEFT DOWN", "group": "SBUS_2", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 893, "y": 190, "w": 200, "h": 120, "radius": 8},
+    36: {"name": "SBUS2 M2006 Right Down", "label": "RIGHT DOWN", "group": "SBUS_2", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 182, "y": 322, "w": 200, "h": 120, "radius": 8},
+    37: {"name": "SBUS2 Relay Left", "label": "RELAY LEFT", "group": "SBUS_2", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 419, "y": 322, "w": 200, "h": 120, "radius": 8},
+    38: {"name": "SBUS2 Relay Center", "label": "RELAY CENTER", "group": "SBUS_2", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 656, "y": 322, "w": 200, "h": 120, "radius": 8},
+    39: {"name": "SBUS2 Relay Right", "label": "RELAY RIGHT", "group": "SBUS_2", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 893, "y": 322, "w": 200, "h": 120, "radius": 8},
+    40: {"name": "R1 Catch Prepare", "label": "PREPARE", "group": "CATCH", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 182, "y": 454, "w": 160, "h": 120, "radius": 8},
+    41: {"name": "R1 Catch Raise", "label": "RAISE", "group": "CATCH", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 370, "y": 454, "w": 160, "h": 120, "radius": 8},
+    42: {"name": "R1 Catch Attack", "label": "ATTACK", "group": "CATCH", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 558, "y": 454, "w": 160, "h": 120, "radius": 8},
+    46: {"name": "R1 Catch Release", "label": "RELEASE", "group": "CATCH", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 746, "y": 454, "w": 160, "h": 120, "radius": 8},
+    47: {"name": "R1 Catch Seize", "label": "SEIZE", "group": "CATCH", "mode": DEFAULT_BUTTON_ACTIVATION_MODE, "x": 934, "y": 454, "w": 160, "h": 120, "radius": 8},
 }
 
 VIRTUAL_BUTTON_IDS = tuple(VIRTUAL_BUTTON_MAP)

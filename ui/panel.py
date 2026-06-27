@@ -1072,11 +1072,11 @@ class ControllerPanel:
                 font=("DejaVu Sans Mono", 11, "bold"),
                 anchor="w",
             )
-            mode_label = self.virtual_button_mode_label(button_id)
+            group_label = str(spec.get("group", "")).strip()
             self.canvas.create_text(
                 self.x(spec["x"] + spec["w"] - 18),
                 self.y(spec["y"] + 20),
-                text=mode_label,
+                text=group_label,
                 fill=blend_color(MUTED, ACTIVE_TEXT, light),
                 font=("DejaVu Sans Mono", 10, "bold"),
                 anchor="e",
@@ -1089,12 +1089,6 @@ class ControllerPanel:
                 font=("DejaVu Sans", 19 if "\n" in str(spec["label"]) else 21, "bold"),
                 justify="center",
             )
-
-    def virtual_button_mode_label(self, button_id: int) -> str:
-        mode = self.virtual_button_mode(button_id)
-        if mode == "momentary":
-            return "HOLD"
-        return "TOGGLE"
 
     def draw_footer(self) -> None:
         for action, spec in FOOTER_TOUCH_BUTTONS.items():
