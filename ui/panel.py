@@ -30,6 +30,7 @@ from ui.config import (
     MAP_EDITOR_TRIGGER_BUTTON_ID,
     OUTPUT_PHYSICAL_BUTTON_IDS,
     REFRESH_MS,
+    SBUS2_ROW_LABELS,
     UI_COLOR_THEME,
     UI_COLOR_THEMES,
     VIRTUAL_BUTTON_IDS,
@@ -1037,12 +1038,25 @@ class ControllerPanel:
         )
 
     def draw_virtual_buttons(self) -> None:
+        for row in SBUS2_ROW_LABELS:
+            self.canvas.create_text(
+                self.x(row["x"]),
+                self.y(row["y"]),
+                text=row["label"],
+                fill=MUTED,
+                font=("DejaVu Sans Mono", 12, "bold"),
+                anchor="w",
+            )
+
         for button_id, spec in VIRTUAL_BUTTON_MAP.items():
             active = self.state.virtual_button_toggle.get(button_id, False)
             light = self.ease_light(self.button_light_level("virtual", button_id, active))
-            fill = blend_color(SURFACE_ALT, GREEN_DARK, light)
+            compact = spec.get("style") == "compact"
+            idle_fill = ACCENT_BG if compact else SURFACE_ALT
+            idle_outline = BLUE if compact else LINE
+            fill = blend_color(idle_fill, GREEN_DARK, light)
             pulse = self.active_pulse(button_id) * light
-            outline = blend_color(LINE, blend_color(GREEN, ACTIVE_GLOW, pulse), light)
+            outline = blend_color(idle_outline, blend_color(GREEN, ACTIVE_GLOW, pulse), light)
             if light > 0.02:
                 self.rounded_rect(
                     spec["x"] - 5,
@@ -1064,31 +1078,56 @@ class ControllerPanel:
                 outline=outline,
                 width=2 + round(light * 2),
             )
-            self.canvas.create_text(
-                self.x(spec["x"] + 18),
-                self.y(spec["y"] + 20),
-                text=f"{button_id}",
-                fill=blend_color(MUTED, ACTIVE_TEXT, light),
-                font=("DejaVu Sans Mono", 11, "bold"),
-                anchor="w",
-            )
             group_label = str(spec.get("group", "")).strip()
-            self.canvas.create_text(
-                self.x(spec["x"] + spec["w"] - 18),
-                self.y(spec["y"] + 20),
-                text=group_label,
-                fill=blend_color(MUTED, ACTIVE_TEXT, light),
-                font=("DejaVu Sans Mono", 10, "bold"),
-                anchor="e",
-            )
-            self.canvas.create_text(
-                self.x(spec["x"] + spec["w"] / 2),
-                self.y(spec["y"] + spec["h"] / 2),
-                text=spec["label"],
-                fill=blend_color(TEXT, ACTIVE_TEXT, light),
-                font=("DejaVu Sans", 19 if "\n" in str(spec["label"]) else 21, "bold"),
-                justify="center",
-            )
+            if compact:
+                center_y = spec["y"] + spec["h"] / 2
+                self.canvas.create_text(
+                    self.x(spec["x"] + 14),
+                    self.y(center_y),
+                    text=f"{button_id}",
+                    fill=blend_color(MUTED, ACTIVE_TEXT, light),
+                    font=("DejaVu Sans Mono", 10, "bold"),
+                    anchor="w",
+                )
+                self.canvas.create_text(
+                    self.x(spec["x"] + spec["w"] / 2),
+                    self.y(center_y),
+                    text=spec["label"],
+                    fill=blend_color(TEXT, ACTIVE_TEXT, light),
+                    font=("DejaVu Sans", 13, "bold"),
+                )
+                self.canvas.create_text(
+                    self.x(spec["x"] + spec["w"] - 12),
+                    self.y(center_y),
+                    text=group_label,
+                    fill=blend_color(MUTED, ACTIVE_TEXT, light),
+                    font=("DejaVu Sans Mono", 8, "bold"),
+                    anchor="e",
+                )
+            else:
+                self.canvas.create_text(
+                    self.x(spec["x"] + 14),
+                    self.y(spec["y"] + 18),
+                    text=f"{button_id}",
+                    fill=blend_color(MUTED, ACTIVE_TEXT, light),
+                    font=("DejaVu Sans Mono", 10, "bold"),
+                    anchor="w",
+                )
+                self.canvas.create_text(
+                    self.x(spec["x"] + spec["w"] - 14),
+                    self.y(spec["y"] + 18),
+                    text=group_label,
+                    fill=blend_color(MUTED, ACTIVE_TEXT, light),
+                    font=("DejaVu Sans Mono", 9, "bold"),
+                    anchor="e",
+                )
+                self.canvas.create_text(
+                    self.x(spec["x"] + spec["w"] / 2),
+                    self.y(spec["y"] + spec["h"] / 2 + 6),
+                    text=spec["label"],
+                    fill=blend_color(TEXT, ACTIVE_TEXT, light),
+                    font=("DejaVu Sans", 20, "bold"),
+                )
 
     def draw_footer(self) -> None:
         for action, spec in FOOTER_TOUCH_BUTTONS.items():
