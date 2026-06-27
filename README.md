@@ -107,16 +107,21 @@ conda activate controller
 python -m app.udp_receiver --bind-ip 0.0.0.0 --port 5005
 ```
 
-ROS2 接收端一键启动：
+ROS2 接收端启动分成两个脚本。先启动 UDP 解码节点：
 
 ```bash
 ./start_receiver.sh
 ```
 
-该脚本会先加载 ROS2 环境和本仓库 `install/setup.bash`，然后同时启动：
+该脚本会加载 ROS2 环境和本仓库 `install/setup.bash`，然后运行 `python3 -m app.ros_udp_receiver`：接收 Steam Deck UDP、解码 `ControllerFrame V2`，发布 `/t0x0303_deck` 和 `/aruco_comm/tx_id`。
 
-- `python3 -m app.ros_udp_receiver`: 接收 Steam Deck UDP、解码 `ControllerFrame V2`，发布 `/t0x0303_deck` 和 `/aruco_comm/tx_id`。
-- `ros2 launch ares_usb comm_bringup.launch.py`: 启动 `ares_usb` USB 透传节点，动态订阅 `t0x....` 的 `Float32MultiArray` topic，并按 topic 里的十六进制 DataID 发送到下位机。
+确认 `/t0x0303_deck` 数据正常后，再另开终端启动 USB 透传节点：
+
+```bash
+./start_usb.sh
+```
+
+该脚本会运行 `ros2 launch ares_usb comm_bringup.launch.py`：启动 `ares_usb` USB 透传节点，动态订阅 `t0x....` 的 `Float32MultiArray` topic，并按 topic 里的十六进制 DataID 发送到下位机。
 
 `ares_usb` 是接收端的 ROS2 USB 透传包。它会扫描所有 `t0x....` 形式的 `std_msgs/msg/Float32MultiArray` topic，例如 `/t0x0303_deck` 会被解析为 DataID `0x0303`，并按高字节 `0x03` 路由到对应 USB 设备。下位机上报的 DataID 会反向发布成 `/r0x....` topic。
 

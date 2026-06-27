@@ -9,4 +9,4 @@ if [ -f install/setup.bash ]; then
   source install/setup.bash
 fi
 
-/usr/bin/python3 -m app.ros_udp_receiver
+ros2 launch ares_usb comm_bringup.launch.py
