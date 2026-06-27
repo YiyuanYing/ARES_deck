@@ -1211,6 +1211,14 @@ class ControllerPanel:
             fill=blend_color(TEXT, ACTIVE_TEXT, light),
             font=("DejaVu Sans", font_size, "bold"),
         )
+        if spec.get("hint"):
+            self.canvas.create_text(
+                self.x(spec.get("hint_x", cx)),
+                self.y(spec.get("hint_y", cy + 28)),
+                text=spec["hint"],
+                fill=blend_color(MUTED, ACTIVE_TEXT, light),
+                font=("DejaVu Sans", 9, "bold"),
+            )
 
     def circle(self, cx: float, cy: float, radius: float, **kwargs) -> None:
         sx, sy, s = self.scale()

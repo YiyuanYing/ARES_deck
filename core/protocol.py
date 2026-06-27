@@ -58,22 +58,27 @@ BUTTON_NAMES = {
     21: "R4",
     22: "L5",
     23: "R5",
-    32: "VIRTUAL_BUTTON_1",
-    33: "VIRTUAL_BUTTON_2",
-    34: "VIRTUAL_BUTTON_3",
-    35: "VIRTUAL_BUTTON_4",
-    36: "VIRTUAL_BUTTON_5",
-    37: "VIRTUAL_BUTTON_6",
-    38: "VIRTUAL_BUTTON_7",
-    39: "VIRTUAL_BUTTON_8",
-    40: "ACTION_SELECT_3_LEFT",
-    41: "ACTION_SELECT_3_MID",
-    42: "ACTION_SELECT_3_RIGHT",
-    43: "ACTION_SELECT_2_LEFT",
-    44: "ACTION_SELECT_2_MID",
-    45: "ACTION_SELECT_2_RIGHT",
-    46: "ACTION_BUILD",
-    47: "ACTION_PLACE",
+    24: "ACTION_SELECT_3_LEFT",
+    25: "ACTION_SELECT_3_MID",
+    26: "ACTION_SELECT_3_RIGHT",
+    27: "ACTION_SELECT_2_LEFT",
+    28: "ACTION_SELECT_2_MID",
+    29: "ACTION_SELECT_2_RIGHT",
+    30: "ACTION_BUILD",
+    31: "ACTION_PLACE",
+    32: "SBUS2_M3508_LEFT_EXTEND",
+    33: "SBUS2_M3508_CENTER_EXTEND",
+    34: "SBUS2_M3508_RIGHT_EXTEND",
+    35: "SBUS2_M2006_LEFT_DOWN",
+    36: "SBUS2_M2006_RIGHT_DOWN",
+    37: "SBUS2_RELAY_LEFT",
+    38: "SBUS2_RELAY_CENTER",
+    39: "SBUS2_RELAY_RIGHT",
+    40: "R1_CATCH_PREPARE",
+    41: "R1_CATCH_RAISE",
+    42: "R1_CATCH_ATTACK",
+    46: "R1_CATCH_RELEASE",
+    47: "R1_CATCH_SEIZE",
 }
 BUTTON_IDS = {name: button_id for button_id, name in BUTTON_NAMES.items()}
 
@@ -289,7 +294,7 @@ def _self_test() -> None:
     assert struct.calcsize(FRAME_FMT) == FRAME_LENGTH
 
     axes = {"lx": 0.123, "ly": -0.35, "rx": 0.0, "ry": 1.25}
-    buttons = {"A": True, "B": False, "RB": True, "STEAM": False, "VIRTUAL_BUTTON_2": True}
+    buttons = {"A": True, "B": False, "RB": True, "STEAM": False, "SBUS2_M3508_CENTER_EXTEND": True}
     frame = build_controller_frame(65535, axes, buttons, enable=False)
     parsed = parse_controller_frame(frame)
     assert len(frame) == FRAME_LENGTH
@@ -300,6 +305,7 @@ def _self_test() -> None:
     assert parsed["buttons"]["A"] is True
     assert parsed["buttons"]["RB"] is True
     assert parsed["buttons"]["B"] is False
+    assert parsed["buttons"]["SBUS2_M3508_CENTER_EXTEND"] is True
     assert parsed["flags"]["enable"] is False
     assert parsed["flags"]["estop"] is False
 
