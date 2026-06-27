@@ -466,18 +466,18 @@ R2 动作弹窗使用虚拟按键 `24~31`，由实体 `...` / Quick Access（ID 
 | 30 | ACTION_BUILD | `BUILD` |
 | 31 | ACTION_PLACE | `PLACE` |
 
-主页显示 13 个机构动作虚拟按键，均使用 `momentary` 模式：
+主页显示 13 个机构动作虚拟按键，均使用 `toggle` 模式：
 
 | ID | Protocol Name | GUI Label | 动作 |
 |---:|---|---|---|
-| 32 | SBUS2_M3508_LEFT_EXTEND | `LEFT EXT` | sbus_2：M3508 left extend |
-| 33 | SBUS2_M3508_CENTER_EXTEND | `CENTER EXT` | sbus_2：M3508 center extend |
-| 34 | SBUS2_M3508_RIGHT_EXTEND | `RIGHT EXT` | sbus_2：M3508 right extend |
-| 35 | SBUS2_M2006_LEFT_DOWN | `LEFT DOWN` | sbus_2：M2006 left down |
-| 36 | SBUS2_M2006_RIGHT_DOWN | `RIGHT DOWN` | sbus_2：M2006 right down |
-| 37 | SBUS2_RELAY_LEFT | `RELAY LEFT` | sbus_2：relay left |
-| 38 | SBUS2_RELAY_CENTER | `RELAY CENTER` | sbus_2：relay center |
-| 39 | SBUS2_RELAY_RIGHT | `RELAY RIGHT` | sbus_2：relay right |
+| 32 | SBUS2_M3508_LEFT_EXTEND | `EXT L` | sbus_2：M3508 left extend |
+| 33 | SBUS2_M3508_CENTER_EXTEND | `EXT C` | sbus_2：M3508 center extend |
+| 34 | SBUS2_M3508_RIGHT_EXTEND | `EXT R` | sbus_2：M3508 right extend |
+| 35 | SBUS2_M2006_LEFT_DOWN | `DOWN L` | sbus_2：M2006 left down |
+| 36 | SBUS2_M2006_RIGHT_DOWN | `DOWN R` | sbus_2：M2006 right down |
+| 37 | SBUS2_RELAY_LEFT | `RELAY L` | sbus_2：relay left |
+| 38 | SBUS2_RELAY_CENTER | `RELAY C` | sbus_2：relay center |
+| 39 | SBUS2_RELAY_RIGHT | `RELAY R` | sbus_2：relay right |
 | 40 | R1_CATCH_PREPARE | `PREPARE` | R1_catch：prepare |
 | 41 | R1_CATCH_RAISE | `RAISE` | R1_catch：raise |
 | 42 | R1_CATCH_ATTACK | `ATTACK` | R1_catch：attack |
@@ -490,7 +490,7 @@ R2 动作弹窗使用虚拟按键 `24~31`，由实体 `...` / Quick Access（ID 
 - `toggle`: 按一次锁存为 True，再按一次解除。
 - `momentary`: 按住为 True，松开为 False。
 
-默认触发方式是 `momentary`。屏幕虚拟按钮在 `VIRTUAL_BUTTON_MAP` 的每个按钮条目里设置 `"mode"`。Steam Deck 实体按钮在 `PHYSICAL_BUTTON_MODE_MAP` 里按 ID 设置，其中 `MENU / Start` 保持 `toggle` 用于本地 ESTOP。普通实体按键和主页虚拟按键会合并到 `buttons` bitmask；已映射到 `/aruco_comm/tx_id` 的 R2 Target Action 按钮不会进入 `/controller` bitmask。
+全局默认触发方式是 `momentary`，中间区域的 13 个机构动作虚拟按键在 `VIRTUAL_BUTTON_MAP` 中显式设置为 `toggle`。屏幕虚拟按钮可以在每个条目里单独设置 `"mode"`。Steam Deck 实体按钮在 `PHYSICAL_BUTTON_MODE_MAP` 里按 ID 设置，其中 `MENU / Start` 保持 `toggle` 用于本地 ESTOP。普通实体按键和主页虚拟按键会合并到 `buttons` bitmask；已映射到 `/aruco_comm/tx_id` 的 R2 Target Action 按钮不会进入 `/controller` bitmask。
 
 ## Flags
 

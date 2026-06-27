@@ -1052,11 +1052,9 @@ class ControllerPanel:
             active = self.state.virtual_button_toggle.get(button_id, False)
             light = self.ease_light(self.button_light_level("virtual", button_id, active))
             compact = spec.get("style") == "compact"
-            idle_fill = ACCENT_BG if compact else SURFACE_ALT
-            idle_outline = BLUE if compact else LINE
-            fill = blend_color(idle_fill, GREEN_DARK, light)
+            fill = blend_color(SURFACE_ALT, GREEN_DARK, light)
             pulse = self.active_pulse(button_id) * light
-            outline = blend_color(idle_outline, blend_color(GREEN, ACTIVE_GLOW, pulse), light)
+            outline = blend_color(LINE, blend_color(GREEN, ACTIVE_GLOW, pulse), light)
             if light > 0.02:
                 self.rounded_rect(
                     spec["x"] - 5,
@@ -1094,7 +1092,7 @@ class ControllerPanel:
                     self.y(center_y),
                     text=spec["label"],
                     fill=blend_color(TEXT, ACTIVE_TEXT, light),
-                    font=("DejaVu Sans", 13, "bold"),
+                    font=("DejaVu Sans", 17, "bold"),
                 )
                 self.canvas.create_text(
                     self.x(spec["x"] + spec["w"] - 12),
@@ -1126,7 +1124,7 @@ class ControllerPanel:
                     self.y(spec["y"] + spec["h"] / 2 + 6),
                     text=spec["label"],
                     fill=blend_color(TEXT, ACTIVE_TEXT, light),
-                    font=("DejaVu Sans", 20, "bold"),
+                    font=("DejaVu Sans", 17, "bold"),
                 )
 
     def draw_footer(self) -> None:
