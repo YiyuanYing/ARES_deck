@@ -59,6 +59,7 @@ PANEL_DARK = THEME["panel_dark"]
 PANEL_FIELD = THEME["panel_field"]
 STICK_BG = THEME["stick_bg"]
 WARN_BG = THEME["warn_bg"]
+HOST_STATUS_MAX_AGE_SECONDS = 2.0
 ACCENT_BG = THEME["accent_bg"]
 DANGER_BG = THEME["danger_bg"]
 BUTTON_IDLE = THEME["button_idle"]
@@ -876,7 +877,7 @@ class ControllerPanel:
         rows: List[Dict[str, str]] = []
         for target in self.targets:
             reachable, checked_at = host_snapshots.get(target.ip, (False, 0.0))
-            fresh = checked_at > 0.0 and now - checked_at <= 2.5
+            fresh = checked_at > 0.0 and now - checked_at <= HOST_STATUS_MAX_AGE_SECONDS
             if reachable and fresh:
                 state = "connected"
                 color = HOST_CONNECTED
@@ -894,7 +895,7 @@ class ControllerPanel:
         for ip, reachable, checked_at in self.host_monitor.snapshot_hosts():
             if ip != target.ip:
                 continue
-            return bool(reachable) and checked_at > 0.0 and now - checked_at <= 2.5
+            return bool(reachable) and checked_at > 0.0 and now - checked_at <= HOST_STATUS_MAX_AGE_SECONDS
         return False
 
     def draw_link_panel(self, x: float, y: float, width: float, height: float) -> None:

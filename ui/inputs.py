@@ -362,6 +362,7 @@ class HostReachabilityMonitor(threading.Thread):
         self.stop_event = threading.Event()
         self.lock = threading.Lock()
         self.hosts: Dict[str, tuple[bool, float]] = {ip: (False, 0.0) for ip in self.target_ips}
+        self.workers: List[threading.Thread] = []
 
     def stop(self) -> None:
         self.stop_event.set()
@@ -377,21 +378,37 @@ class HostReachabilityMonitor(threading.Thread):
             return [(ip, reachable, checked_at) for ip, (reachable, checked_at) in self.hosts.items()]
 
     def run(self) -> None:
+        self.workers = [
+            threading.Thread(
+                target=self._monitor_host,
+                args=(ip,),
+                name=f"HostPing-{ip}",
+                daemon=True,
+            )
+            for ip in self.target_ips
+        ]
+        for worker in self.workers:
+            worker.start()
+
+        self.stop_event.wait()
+        for worker in self.workers:
+            worker.join(timeout=0.6)
+
+    def _monitor_host(self, target_ip: str) -> None:
         while not self.stop_event.is_set():
-            now = time.monotonic()
-            results = [(ip, self._ping_once(ip), now) for ip in self.target_ips]
+            reachable = self._ping_once(target_ip)
+            checked_at = time.monotonic()
             with self.lock:
-                for ip, reachable, checked_at in results:
-                    self.hosts[ip] = (reachable, checked_at)
+                self.hosts[target_ip] = (reachable, checked_at)
             self.stop_event.wait(self.interval)
 
     def _ping_once(self, target_ip: str) -> bool:
         if platform.system().lower().startswith("win"):
             command = ["ping", "-n", "1", "-w", "800", target_ip]
         else:
-            command = ["ping", "-c", "1", "-W", "1", target_ip]
+            command = ["ping", "-c", "1", "-W", "0.3", target_ip]
         try:
-            result = subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.5)
+            result = subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=0.5)
         except (OSError, subprocess.TimeoutExpired):
             return False
         return result.returncode == 0
