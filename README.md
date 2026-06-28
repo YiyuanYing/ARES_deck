@@ -270,6 +270,9 @@ udp_sender:
     - ip: "10.20.99.23"
       port: 5005
       map_port: 5006
+    - ip: "10.20.99.24"
+      port: 5005
+      map_port: 5006
 ```
 
 命令行参数仍然可用，并且会覆盖 `app/config/param.yaml` 中的默认值。

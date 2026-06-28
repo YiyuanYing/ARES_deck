@@ -105,11 +105,11 @@ VIRTUAL_BUTTON_MAP = {
     37: {"name": "SBUS2 Relay Left", "label": "RELAY L", "group": "SBUS_2", "mode": "toggle", "x": 248, "y": 450, "w": 160, "h": 104, "radius": 8},
     38: {"name": "SBUS2 Relay Center", "label": "RELAY C", "group": "SBUS_2", "mode": "toggle", "x": 422, "y": 450, "w": 160, "h": 104, "radius": 8},
     39: {"name": "SBUS2 Relay Right", "label": "RELAY R", "group": "SBUS_2", "mode": "toggle", "x": 596, "y": 450, "w": 160, "h": 104, "radius": 8},
-    40: {"name": "R1 Catch Prepare", "label": "PREPARE", "group": "CATCH", "style": "compact", "mode": "toggle", "x": 786, "y": 202, "w": 312, "h": 58, "radius": 8},
-    41: {"name": "R1 Catch Raise", "label": "RAISE", "group": "CATCH", "style": "compact", "mode": "toggle", "x": 786, "y": 276, "w": 312, "h": 58, "radius": 8},
-    42: {"name": "R1 Catch Attack", "label": "ATTACK", "group": "CATCH", "style": "compact", "mode": "toggle", "x": 786, "y": 350, "w": 312, "h": 58, "radius": 8},
-    46: {"name": "R1 Catch Release", "label": "RELEASE", "group": "CATCH", "style": "compact", "mode": "toggle", "x": 786, "y": 424, "w": 312, "h": 58, "radius": 8},
-    47: {"name": "R1 Catch Seize", "label": "SEIZE", "group": "CATCH", "style": "compact", "mode": "toggle", "x": 786, "y": 498, "w": 312, "h": 58, "radius": 8},
+    40: {"name": "R1 Catch Prepare", "label": "PREPARE", "group": "CATCH", "style": "compact", "mode": "toggle", "x": 786, "y": 350, "w": 312, "h": 58, "radius": 8},
+    41: {"name": "R1 Catch Raise", "label": "RAISE", "group": "CATCH", "style": "compact", "mode": "toggle", "x": 786, "y": 424, "w": 312, "h": 58, "radius": 8},
+    42: {"name": "R1 Catch Attack", "label": "ATTACK", "group": "CATCH", "style": "compact", "mode": "toggle", "x": 786, "y": 498, "w": 312, "h": 58, "radius": 8},
+    46: {"name": "R1 Catch Release", "label": "RELEASE", "group": "CATCH", "style": "compact", "mode": "toggle", "x": 786, "y": 202, "w": 312, "h": 58, "radius": 8},
+    47: {"name": "R1 Catch Seize", "label": "SEIZE", "group": "CATCH", "style": "compact", "mode": "toggle", "x": 786, "y": 276, "w": 312, "h": 58, "radius": 8},
 }
 
 VIRTUAL_BUTTON_IDS = tuple(VIRTUAL_BUTTON_MAP)

@@ -906,7 +906,11 @@ class ControllerPanel:
             outline = HOST_CONNECTED
             fill = blend_color(PANEL_DARK, HOST_CONNECTED, 0.20)
             title_color = HOST_CONNECTED
-        elif connected > 0 or checking > 0:
+        elif connected > 0:
+            outline = HOST_CONNECTED
+            fill = blend_color(PANEL_DARK, HOST_CONNECTED, 0.20)
+            title_color = HOST_CONNECTED
+        elif checking > 0:
             outline = YELLOW
             fill = PANEL_DARK
             title_color = YELLOW
@@ -970,12 +974,12 @@ class ControllerPanel:
         if not disconnected and not degraded:
             return
         pulse = 0.5 + 0.5 * math.sin(time.monotonic() * 7.0)
-        base = RED if disconnected else YELLOW
-        fill = DANGER_BG if disconnected else WARN_BG
+        base = RED if disconnected else HOST_CONNECTED
+        fill = DANGER_BG if disconnected else blend_color(PANEL_DARK, HOST_CONNECTED, 0.20)
         outline = blend_color(base, ACTIVE_GLOW, pulse * 0.35)
         rows = self.host_status_rows()
         connected = sum(1 for row in rows if row["state"] == "connected")
-        text = "HOST DISCONNECTED - OUTPUT ZEROED" if disconnected else f"HOST DEGRADED - {connected}/{len(rows)} CONNECTED"
+        text = "HOST DISCONNECTED - OUTPUT ZEROED" if disconnected else f"HOST PARTIAL - {connected}/{len(rows)} CONNECTED"
         self.rounded_rect(162, 132, 1118, 160, 8, fill=fill, outline=outline, width=3)
         self.canvas.create_text(
             self.x(640),

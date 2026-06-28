@@ -6,9 +6,9 @@ controller_panel:
     - ip: "192.168.1.50"
       port: 5005
       map_port: 5006
-    # - ip: "192.168.1.51"
-    #   port: 5005
-    #   map_port: 5006
+    - ip: "192.168.1.51"
+      port: 5005
+      map_port: 5006
   send_hz: 100.0
   failsafe_timeout_ms: 150
   touch_device: ""
@@ -33,9 +33,9 @@ udp_sender:
     - ip: "192.168.1.50"
       port: 5005
       map_port: 5006
-    # - ip: "192.168.1.51"
-    #   port: 5005
-    #   map_port: 5006
+    - ip: "192.168.1.51"
+      port: 5005
+      map_port: 5006
   send_hz: 100.0
   failsafe_timeout_ms: 150
 
