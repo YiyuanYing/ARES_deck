@@ -426,6 +426,7 @@ def main() -> None:
     args = parse_args()
     try:
         import rclpy
+        from rclpy.executors import ExternalShutdownException
     except ImportError as exc:
         raise SystemExit("ROS2 rclpy is required. Source your ROS2 environment before running this node.") from exc
 
@@ -436,9 +437,12 @@ def main() -> None:
         rclpy.spin(publisher.node)
     except KeyboardInterrupt:
         publisher.node.get_logger().info("stopped")
+    except ExternalShutdownException:
+        pass
     finally:
         publisher.stop()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":
