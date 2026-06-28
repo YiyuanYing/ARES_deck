@@ -958,33 +958,19 @@ class ControllerPanel:
         rows = self.host_status_rows()
         return bool(rows) and all(row["state"] == "disconnected" for row in rows)
 
-    def is_host_degraded(self) -> bool:
-        rows = self.host_status_rows()
-        if not rows:
-            return False
-        connected = sum(1 for row in rows if row["state"] == "connected")
-        return 0 < connected < len(rows)
-
     def is_estop_active(self) -> bool:
         return bool(self.state.button_toggle.get(BUTTON_IDS["MENU"], False))
 
     def draw_host_disconnect_banner(self) -> None:
-        disconnected = self.is_host_disconnected()
-        degraded = self.is_host_degraded()
-        if not disconnected and not degraded:
+        if not self.is_host_disconnected():
             return
         pulse = 0.5 + 0.5 * math.sin(time.monotonic() * 7.0)
-        base = RED if disconnected else HOST_CONNECTED
-        fill = DANGER_BG if disconnected else blend_color(PANEL_DARK, HOST_CONNECTED, 0.20)
-        outline = blend_color(base, ACTIVE_GLOW, pulse * 0.35)
-        rows = self.host_status_rows()
-        connected = sum(1 for row in rows if row["state"] == "connected")
-        text = "HOST DISCONNECTED - OUTPUT ZEROED" if disconnected else f"HOST PARTIAL - {connected}/{len(rows)} CONNECTED"
-        self.rounded_rect(162, 132, 1118, 160, 8, fill=fill, outline=outline, width=3)
+        outline = blend_color(RED, ACTIVE_GLOW, pulse * 0.35)
+        self.rounded_rect(162, 132, 1118, 160, 8, fill=DANGER_BG, outline=outline, width=3)
         self.canvas.create_text(
             self.x(640),
             self.y(146),
-            text=text,
+            text="HOST DISCONNECTED - OUTPUT ZEROED",
             fill=ACTIVE_TEXT,
             font=("DejaVu Sans", 15, "bold"),
         )
