@@ -8,7 +8,7 @@
 #include <array>
 #include <arpa/inet.h>
 
-namespace ares_usb_comm {
+namespace ares_usb_bridge {
 
 // -------------------- DataID 常量 --------------------
 constexpr uint16_t DATAID_MOTORCMD_ANGLE   = 0x0101; ///< 上位机 -> 下位机：电机角度指令
@@ -79,4 +79,4 @@ inline void unpack_float_array_be(const uint8_t* src, std::array<float, N>& dst)
     }
 }
 
-} // namespace ares_usb_comm 
+} // namespace ares_usb_bridge

@@ -5,9 +5,9 @@ from launch_ros.actions import Node
 def generate_launch_description():
     return LaunchDescription([
         Node(
-            package='ares_usb',
-            executable='usb_bridge_node',
-            name='usb_bridge_node',
+            package='ares_usb_bridge',
+            executable='ares_usb_bridge_node',
+            name='ares_usb_bridge_node',
             output='screen'
         )
     ]) 

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(ares_usb)
+project(ares_usb_bridge)
 
 #------------------------------------------------------------
 # 依赖
@@ -48,22 +48,22 @@ target_link_libraries(ares_bulk ${LIBUSB_LIBRARIES} pthread)
 #------------------------------------------------------------
 # 主节点可执行
 #------------------------------------------------------------
-add_executable(usb_bridge_node src/usb_bridge_node.cpp)
-ament_target_dependencies(usb_bridge_node rclcpp sensor_msgs geometry_msgs std_msgs)
+add_executable(ares_usb_bridge_node src/ares_usb_bridge_node.cpp)
+ament_target_dependencies(ares_usb_bridge_node rclcpp sensor_msgs geometry_msgs std_msgs)
 add_executable(test_publisher_node src/test_publisher_node.cpp)
 ament_target_dependencies(test_publisher_node rclcpp sensor_msgs geometry_msgs std_msgs)
 
 # 使用新的接口链接消息类型支持库
 # rosidl_get_typesupport_target(cpp_typesupport_target "${PROJECT_NAME}" "rosidl_typesupport_cpp")
-# target_link_libraries(usb_bridge_node ${cpp_typesupport_target})
+# target_link_libraries(ares_usb_bridge_node ${cpp_typesupport_target})
 
-target_link_libraries(usb_bridge_node ares_bulk)
+target_link_libraries(ares_usb_bridge_node ares_bulk)
 
 #------------------------------------------------------------
 # 安装
 #------------------------------------------------------------
 # install(TARGETS
-#   usb_bridge_node
+#   ares_usb_bridge_node
 #   test_publisher_node
 #   RUNTIME DESTINATION bin
 #   ARCHIVE DESTINATION lib
@@ -71,7 +71,7 @@ target_link_libraries(usb_bridge_node ares_bulk)
 # )
 
 install(TARGETS 
-  usb_bridge_node 
+  ares_usb_bridge_node
   test_publisher_node
   DESTINATION lib/${PROJECT_NAME}
 )

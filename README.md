@@ -142,24 +142,24 @@ ROS2 接收端可以一键启动 UDP 解码节点和 USB 透传节点：
 
 ```bash
 ./start_single_udp_receiver.sh
-./start_single_usb.sh
+./start_usb_bridge.sh
 ```
 
-前者运行 `python3 -m app.ros_udp_receiver`，接收 Steam Deck UDP、解码 `ControllerFrame V2`，发布 `/t0x0303_deck` 和 `/aruco_comm/tx_id`；后者运行 `ros2 launch ares_usb comm_bringup.launch.py`，启动 `ares_usb` USB 透传节点。
+前者运行 `python3 -m app.ros_udp_receiver`，接收 Steam Deck UDP、解码 `ControllerFrame V2`，发布 `/t0x0303_deck` 和 `/aruco_comm/tx_id`；后者运行 `ros2 launch ares_usb_bridge usb_bridge.launch.py`，启动 `ares_usb_bridge` USB 透传节点。
 
-`ares_usb` 是接收端的 ROS2 USB 透传包。它会扫描所有 `t0x....` 形式的 `std_msgs/msg/Float32MultiArray` topic，例如 `/t0x0303_deck` 会被解析为 DataID `0x0303`，并按高字节 `0x03` 路由到对应 USB 设备。下位机上报的 DataID 会反向发布成 `/r0x....` topic。
+`ares_usb_bridge` 是接收端的 ROS2 topic 与 ARES USB 协议桥接包。它会扫描所有 `t0x....` 形式的 `std_msgs/msg/Float32MultiArray` topic，例如 `/t0x0303_deck` 会被解析为 DataID `0x0303`，并按高字节 `0x03` 路由到对应 USB 设备。下位机上报的 DataID 会反向发布成 `/r0x....` topic。
 
-首次部署或修改 `ares_usb` 后，先编译并加载本仓库工作区：
+首次部署或修改 `ares_usb_bridge` 后，先编译并加载本仓库工作区：
 
 ```bash
 cd ~/ARES_deck
 source /opt/ros/humble/setup.bash
-colcon build --packages-select ares_usb
+colcon build --packages-select ares_usb_bridge
 source install/setup.bash
-ros2 pkg prefix ares_usb
+ros2 pkg prefix ares_usb_bridge
 ```
 
-最后一行能输出类似 `~/ARES_deck/install/ares_usb` 就说明包已经可被 `ros2 launch` 找到。
+最后一行能输出类似 `~/ARES_deck/install/ares_usb_bridge` 就说明包已经可被 `ros2 launch` 找到。
 
 如果只想单独调试 UDP 解码节点，也可以直接运行：
 

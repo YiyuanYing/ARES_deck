@@ -2,7 +2,7 @@
 #include "std_msgs/msg/float32_multi_array.hpp"
 
 #include "ares_protocol.hpp" // 来自 ares_comm/ARES_bulk_library
-#include "ares_usb_comm/helpers.hpp"
+#include "ares_usb_bridge/helpers.hpp"
 
 #include <vector>
 #include <string>
@@ -19,7 +19,7 @@
 
 using namespace std::chrono_literals;
 
-namespace ares_usb_comm
+namespace ares_usb_bridge
 {
 /**
  * @class UsbPassthroughNode
@@ -28,7 +28,7 @@ namespace ares_usb_comm
 class UsbPassthroughNode : public rclcpp::Node
 {
 public:
-    UsbPassthroughNode() : Node("usb_passthrough_node")
+    UsbPassthroughNode() : Node("ares_usb_bridge_node")
     {
         RCLCPP_INFO(this->get_logger(), "UsbPassthroughNode starting...");
 
@@ -372,13 +372,13 @@ private:
     std::unordered_set<uint16_t> pending_pubs_to_create_;
 };
 
-} // namespace ares_usb_comm
+} // namespace ares_usb_bridge
 
 int main(int argc, char **argv)
 {
     rclcpp::init(argc, argv);
     {
-        auto node = std::make_shared<ares_usb_comm::UsbPassthroughNode>();
+        auto node = std::make_shared<ares_usb_bridge::UsbPassthroughNode>();
         rclcpp::spin(node);
     }
     rclcpp::shutdown();

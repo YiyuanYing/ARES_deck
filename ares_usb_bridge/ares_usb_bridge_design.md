@@ -97,10 +97,10 @@
 | `/orient` | geometry_msgs/Quaternion | usb_node → App | IMU 姿态（当前为默认值） |
 | `/angvel` | geometry_msgs/Vector3 | usb_node → App | IMU 角速度 |
 
-> 实现上，`usb_bridge_node` 在 MIT 模式下会同时打包角度 (`0x0101`) 与力矩 (`0x0102`) 两帧发送，或者在简化模式下仅发送角度帧。
+> 实现上，`ares_usb_bridge_node` 在 MIT 模式下会同时打包角度 (`0x0101`) 与力矩 (`0x0102`) 两帧发送，或者在简化模式下仅发送角度帧。
 
 ### 3.3 节点
-1. **usb_bridge_node (C++)**  
+1. **ares_usb_bridge_node (C++)**
    * 封装 `Protocol` 类；订阅 `/action`，打包 `JointState.position` 为 `SyncFrame(0x0101)` 发送。
    * 在 `sync_cb_` 中根据 `DataID` 分发并发布 `/joint_state`, `/orient`, `/angvel` 消息。
    * 维护心跳与错误回调。
@@ -112,16 +112,16 @@
 
 <!-- ## 4. 目录结构
 ```
-ares_usb_comm/
+ares_usb_bridge/
 ├── ARES_bulk_library/         # 复用/重命名, 仅新增 DataID/FuncID
-├── include/ares_usb_comm/
+├── include/ares_usb_bridge/
 │   ├── protocol.hpp
 │   └── motor_types.hpp
 ├── msg/
 │   ├── MotorCmd.msg
 │   └── MotorState.msg
 ├── src/
-│   ├── usb_bridge_node.cpp
+│   ├── ares_usb_bridge_node.cpp
 │   └── ...
 ├── launch/
 │   └── bringup.launch.py

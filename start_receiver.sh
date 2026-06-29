@@ -99,9 +99,9 @@ UDP_PID=$!
 PIDS+=("$UDP_PID")
 
 if "$SHOW_USB"; then
-  ./start_single_usb.sh &
+  ./start_usb_bridge.sh &
 else
-  ./start_single_usb.sh >>"$USB_LOG" 2>&1 &
+  ./start_usb_bridge.sh >>"$USB_LOG" 2>&1 &
 fi
 USB_PID=$!
 PIDS+=("$USB_PID")

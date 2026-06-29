@@ -9,4 +9,4 @@ if [ -f install/setup.bash ]; then
   source install/setup.bash
 fi
 
-exec ros2 launch ares_usb comm_bringup.launch.py
+exec ros2 launch ares_usb_bridge usb_bridge.launch.py
