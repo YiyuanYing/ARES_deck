@@ -16,14 +16,14 @@ constexpr uint16_t SYNC_FRAME_HEAD = 0x5A5A;
 constexpr uint16_t ERROR_FRAME_HEAD = 0xCADE;
 constexpr uint16_t HEARTBEAT_ERROR_CODE = (1 << 8); // BIT(8)
 constexpr uint8_t HEARTBEAT_REQUEST_ID = 0xFF;
-constexpr std::chrono::milliseconds HEARTBEAT_INTERVAL{3}; // 10ms
+constexpr std::chrono::milliseconds HEARTBEAT_INTERVAL{100};
 
 constexpr size_t USB_FS_MPS = 64;
 constexpr uint16_t DEFAULT_VID = 0x1209;
 constexpr uint16_t DEFAULT_PID = 0x0001;
 constexpr uint8_t EP_IN = 0x81;
 constexpr uint8_t EP_OUT = 0x01;
-constexpr int USB_TIMEOUT_MS = 1000; // USB 操作超时时间
+constexpr int USB_TIMEOUT_MS = 50; // 避免故障设备长时间阻塞发送线程
 
 // 执行帧
 struct ExecFrame {
@@ -79,7 +79,10 @@ public:
     void disconnect();
     // 检查连接状态
     bool is_connected() const;
+    bool manages_reconnect() const;
     uint16_t pid() const;
+    uint64_t heartbeat_success_count() const;
+    uint64_t heartbeat_failure_count() const;
 
     // 注册同步帧回调
     void register_sync_callback(SyncCallback cb);
@@ -123,6 +126,10 @@ private:
     std::thread heartbeat_thread_;
     std::atomic<bool> running_{false}; // 控制线程运行状态
     std::atomic<bool> stop_{false}; // 停止 USB 读取线程
+    std::atomic<bool> manages_reconnect_{false};
+    std::atomic<bool> read_idle_{true};
+    std::atomic<uint64_t> heartbeat_success_count_{0};
+    std::atomic<uint64_t> heartbeat_failure_count_{0};
 
     // 回调函数
     SyncCallback sync_cb_ = nullptr;

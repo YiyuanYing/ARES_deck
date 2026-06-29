@@ -11,6 +11,9 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <atomic>
+#include <condition_variable>
+#include <thread>
 #include <mutex>
 #include <memory>
 
@@ -39,6 +42,9 @@ public:
         // 定时器 2: 异步创建上报 (RX) 通道 (10Hz)，剥离高耗时操作
         pub_creation_timer_ = this->create_wall_timer(
             100ms, std::bind(&UsbPassthroughNode::create_pending_publishers, this));
+
+        diagnostics_timer_ = this->create_wall_timer(
+            1s, std::bind(&UsbPassthroughNode::report_diagnostics, this));
             
         RCLCPP_INFO(this->get_logger(), "Passthrough bridge initialized. Waiting for topics 't0x...' or USB data...");
     }
@@ -47,6 +53,9 @@ public:
     {
         RCLCPP_INFO(this->get_logger(), "Disconnecting USB devices...");
         for (auto& board : boards_) {
+            board->stop_tx();
+        }
+        for (auto& board : boards_) {
             board->protocol.disconnect();
         }
     }
@@ -54,18 +63,93 @@ public:
 private:
     struct BoardRoute
     {
-        explicit BoardRoute(uint16_t usb_pid)
-            : pid(usb_pid), protocol(usb_pid)
+        struct PendingFrame
         {
+            std::vector<uint8_t> payload;
+        };
+
+        explicit BoardRoute(uint16_t usb_pid, rclcpp::Logger node_logger)
+            : pid(usb_pid), protocol(usb_pid), logger(node_logger)
+        {
+        }
+
+        void start_tx()
+        {
+            tx_thread = std::thread([this]() {
+                auto next_connect_attempt = std::chrono::steady_clock::now();
+                while (true) {
+                    std::unordered_map<uint16_t, PendingFrame> local_frames;
+                    {
+                        std::unique_lock<std::mutex> lock(tx_mutex);
+                        tx_cv.wait(lock, [this]() {
+                            return stopping || !pending_frames.empty();
+                        });
+                        if (stopping) {
+                            return;
+                        }
+                        local_frames.swap(pending_frames);
+                    }
+
+                    for (auto& [data_id, frame] : local_frames) {
+                        if (!protocol.is_connected() &&
+                            !protocol.manages_reconnect()) {
+                            const auto now = std::chrono::steady_clock::now();
+                            if (now >= next_connect_attempt) {
+                                protocol.connect();
+                                next_connect_attempt = now + std::chrono::seconds(1);
+                            }
+                        }
+                        if (protocol.send_sync(
+                                data_id, frame.payload.data(), frame.payload.size())) {
+                            ++tx_success;
+                        } else {
+                            ++tx_failure;
+                        }
+                    }
+                }
+            });
+        }
+
+        void enqueue(uint16_t data_id, const std::vector<uint8_t>& payload)
+        {
+            {
+                std::lock_guard<std::mutex> lock(tx_mutex);
+                pending_frames[data_id].payload = payload;
+            }
+            tx_cv.notify_one();
+        }
+
+        void stop_tx()
+        {
+            {
+                std::lock_guard<std::mutex> lock(tx_mutex);
+                stopping = true;
+            }
+            tx_cv.notify_one();
+            if (tx_thread.joinable()) {
+                tx_thread.join();
+            }
         }
 
         uint16_t pid;
         ares::Protocol protocol;
+        rclcpp::Logger logger;
+        std::mutex tx_mutex;
+        std::condition_variable tx_cv;
+        std::unordered_map<uint16_t, PendingFrame> pending_frames;
+        std::thread tx_thread;
+        bool stopping{false};
+        std::atomic<uint64_t> tx_success{0};
+        std::atomic<uint64_t> tx_failure{0};
+        uint64_t last_tx_success{0};
+        uint64_t last_tx_failure{0};
+        uint64_t last_heartbeat_success{0};
+        uint64_t last_heartbeat_failure{0};
     };
 
     void add_board(uint16_t pid)
     {
-        auto board = std::make_unique<BoardRoute>(pid);
+        auto board = std::make_unique<BoardRoute>(pid, this->get_logger());
         BoardRoute *board_ptr = board.get();
 
         board_ptr->protocol.register_sync_callback(
@@ -85,6 +169,7 @@ private:
                 pid);
         }
 
+        board_ptr->start_tx();
         boards_.push_back(std::move(board));
     }
 
@@ -158,13 +243,7 @@ private:
         }
 
         for (auto& board : boards_) {
-            if (!board->protocol.send_sync(id, payload.data(), payload.size()))
-            {
-                RCLCPP_ERROR(
-                    this->get_logger(),
-                    "Failed to TX broadcast data. PID=0x%04X DataID=0x%04X",
-                    board->pid, id);
-            }
+            board->enqueue(id, payload);
         }
     }
 
@@ -243,11 +322,41 @@ private:
         }
     }
 
+    void report_diagnostics()
+    {
+        for (auto& board : boards_) {
+            const uint64_t tx_ok = board->tx_success.load();
+            const uint64_t tx_fail = board->tx_failure.load();
+            const uint64_t heartbeat_ok =
+                board->protocol.heartbeat_success_count();
+            const uint64_t heartbeat_fail =
+                board->protocol.heartbeat_failure_count();
+
+            RCLCPP_INFO(
+                this->get_logger(),
+                "USB PID=0x%04X online=%s data_ok=%lu/s data_fail=%lu/s heartbeat_ok=%lu/s heartbeat_fail=%lu/s",
+                board->pid,
+                board->protocol.is_connected() ? "true" : "false",
+                static_cast<unsigned long>(tx_ok - board->last_tx_success),
+                static_cast<unsigned long>(tx_fail - board->last_tx_failure),
+                static_cast<unsigned long>(
+                    heartbeat_ok - board->last_heartbeat_success),
+                static_cast<unsigned long>(
+                    heartbeat_fail - board->last_heartbeat_failure));
+
+            board->last_tx_success = tx_ok;
+            board->last_tx_failure = tx_fail;
+            board->last_heartbeat_success = heartbeat_ok;
+            board->last_heartbeat_failure = heartbeat_fail;
+        }
+    }
+
     // ---------------- 成员变量 ------------------------------------------
     std::vector<std::unique_ptr<BoardRoute>> boards_;
 
     rclcpp::TimerBase::SharedPtr topic_discovery_timer_; 
     rclcpp::TimerBase::SharedPtr pub_creation_timer_; 
+    rclcpp::TimerBase::SharedPtr diagnostics_timer_;
 
     std::unordered_map<std::string, rclcpp::Subscription<std_msgs::msg::Float32MultiArray>::SharedPtr> passthrough_subs_;
     

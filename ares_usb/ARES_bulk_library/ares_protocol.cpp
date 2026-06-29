@@ -91,6 +91,7 @@ bool Protocol::connect() {
 
     std::cout << "USB Device PID=0x" << std::hex << pid_ << std::dec << " connected successfully." << std::endl;
     running_ = true;
+    manages_reconnect_ = true;
     read_thread_ = std::thread(&Protocol::usb_read_loop, this); // 启动读取线程
     heartbeat_thread_ = std::thread(&Protocol::heartbeat_loop, this); // 新增：启动心跳线程
 
@@ -98,10 +99,6 @@ bool Protocol::connect() {
 }
 
 void Protocol::disconnect() {
-    if (!dev_handle_ && !running_) { // 检查 running_ 避免重复执行
-        return;
-    }
-
     running_ = false; // 通知所有线程停止
     stop_ = true;
 
@@ -131,11 +128,23 @@ void Protocol::disconnect() {
 }
 
 bool Protocol::is_connected() const {
-    return dev_handle_ != nullptr && running_;
+    return running_.load();
+}
+
+bool Protocol::manages_reconnect() const {
+    return manages_reconnect_.load();
 }
 
 uint16_t Protocol::pid() const {
     return pid_;
+}
+
+uint64_t Protocol::heartbeat_success_count() const {
+    return heartbeat_success_count_.load();
+}
+
+uint64_t Protocol::heartbeat_failure_count() const {
+    return heartbeat_failure_count_.load();
 }
 
 void Protocol::register_sync_callback(SyncCallback cb) {
@@ -160,13 +169,13 @@ void Protocol::register_error_callback(ErrorCallback cb) {
 
 // 内部 USB 写函数
 bool Protocol::usb_write(const uint8_t* data, size_t len) {
-    if (!is_connected()) return false;
+    if (!running_) return false;
 
     int actual_length = 0;
     int r;
     { // 锁住 USB 写操作，防止多线程冲突
         std::lock_guard<std::mutex> lock(usb_mutex_);
-        if (!dev_handle_) return false; // 再次检查，防止 disconnect 发生在判断之后
+        if (!running_ || !dev_handle_) return false;
         r = libusb_bulk_transfer(dev_handle_, EP_OUT, const_cast<uint8_t*>(data), len, &actual_length, USB_TIMEOUT_MS);
     } // 锁在此处释放
 
@@ -174,10 +183,13 @@ bool Protocol::usb_write(const uint8_t* data, size_t len) {
         return true;
     } else {
         std::cerr << "USB Write Error: " << libusb_error_name(r) << ", transferred: " << actual_length << "/" << len << std::endl;
-        // 可以考虑在这里处理断线等错误，例如调用 disconnect()
-        // if (r == LIBUSB_ERROR_NO_DEVICE || r == LIBUSB_ERROR_IO) {
-        //     disconnect(); // 示例：发生严重错误时断开连接
-        // }
+        if (r == LIBUSB_ERROR_TIMEOUT ||
+            r == LIBUSB_ERROR_NO_DEVICE ||
+            r == LIBUSB_ERROR_IO ||
+            r == LIBUSB_ERROR_PIPE) {
+            // 由心跳线程统一清理旧句柄并重连。
+            running_ = false;
+        }
         return false;
     }
 }
@@ -186,6 +198,7 @@ bool Protocol::usb_write(const uint8_t* data, size_t len) {
 void Protocol::usb_read_loop() {
     uint8_t buffer[USB_FS_MPS]; // 使用最大包大小作为缓冲区
 read_begin:
+    read_idle_ = false;
     while (running_) {
         int actual_length = 0;
         int r = libusb_bulk_transfer(dev_handle_, EP_IN, buffer, sizeof(buffer), &actual_length, 100); // 短超时，避免阻塞 disconnect
@@ -204,6 +217,7 @@ read_begin:
         }
         // 超时或无数据时继续循环
     }
+    read_idle_ = true;
     while(!running_ && !stop_) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
@@ -391,8 +405,11 @@ heartbeat_begin:
         // 发送心跳帧 (usb_write 内部有锁保护)
         if (is_connected()) { // 检查连接状态再发送
              if (!usb_write(reinterpret_cast<uint8_t*>(&heartbeat_frame), sizeof(heartbeat_frame))) {
+                 ++heartbeat_failure_count_;
                  std::cerr << "Failed to send heartbeat frame." << std::endl;
                  // 可以选择在这里处理发送失败，例如尝试重连或停止心跳
+             } else {
+                 ++heartbeat_success_count_;
              }
         }
 
@@ -413,17 +430,35 @@ reconnect_fail:
             return;
         }
 
-        dev_handle_ = libusb_open_device_with_vid_pid(usb_ctx_, vid_, pid_);
-        if (!dev_handle_) {
-            goto reconnect_fail;
+        while (!read_idle_ && !stop_) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
-    
-        // 尝试为设备解绑内核驱动（如果需要）
-        libusb_detach_kernel_driver(dev_handle_, 0); // 忽略错误，可能不需要
-    
-        int r = libusb_claim_interface(dev_handle_, 0); // 假设使用接口 0
-        if (r < 0) {
-            goto reconnect_fail;
+        if (stop_) {
+            return;
+        }
+
+        {
+            // 读线程已停止使用句柄；在写锁内清理旧连接并建立新连接。
+            std::lock_guard<std::mutex> lock(usb_mutex_);
+            if (dev_handle_) {
+                libusb_release_interface(dev_handle_, 0);
+                libusb_close(dev_handle_);
+                dev_handle_ = nullptr;
+            }
+
+            dev_handle_ = libusb_open_device_with_vid_pid(usb_ctx_, vid_, pid_);
+            if (!dev_handle_) {
+                goto reconnect_fail;
+            }
+
+            libusb_detach_kernel_driver(dev_handle_, 0);
+
+            int r = libusb_claim_interface(dev_handle_, 0);
+            if (r < 0) {
+                libusb_close(dev_handle_);
+                dev_handle_ = nullptr;
+                goto reconnect_fail;
+            }
         }
     
         std::cout << "USB Device PID=0x" << std::hex << pid_ << std::dec << " connected successfully." << std::endl;
