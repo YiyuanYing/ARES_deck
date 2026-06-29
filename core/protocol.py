@@ -77,8 +77,7 @@ BUTTON_NAMES = {
     40: "R1_CATCH_PREPARE",
     41: "R1_CATCH_RAISE",
     42: "R1_CATCH_ATTACK",
-    46: "R1_CATCH_RELEASE",
-    47: "R1_CATCH_SEIZE",
+    43: "R1_CATCH_SWITCH",
 }
 BUTTON_IDS = {name: button_id for button_id, name in BUTTON_NAMES.items()}
 

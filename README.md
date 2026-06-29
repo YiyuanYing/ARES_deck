@@ -225,7 +225,7 @@ mask2 = int(msg.data[2])
 
 button_3_pressed = bool(mask0 & (1 << 3))    # A
 button_20_pressed = bool(mask1 & (1 << 4))   # L4
-button_47_pressed = bool(mask2 & (1 << 15))  # R1_CATCH_SEIZE
+button_43_pressed = bool(mask2 & (1 << 11))  # R1_CATCH_SWITCH
 
 lx = float(msg.data[3])
 ly = float(msg.data[4])
@@ -479,7 +479,7 @@ R2 动作弹窗使用虚拟按键 `24~31`，由实体 `...` / Quick Access（ID 
 | 30 | ACTION_BUILD | `BUILD` |
 | 31 | ACTION_PLACE | `PLACE` |
 
-主页显示 13 个机构动作虚拟按键。左侧 SBUS_2 的 8 个按键使用 `toggle` 模式，右侧 R1 Catch 的 5 个按键使用 `momentary` 模式：
+主页显示 12 个机构动作虚拟按键。左侧 SBUS_2 的 8 个按键使用 `toggle` 模式，右侧 R1 Catch 有 4 个按键：
 
 | ID | Protocol Name | GUI Label | 模式 | 动作 |
 |---:|---|---|---|---|
@@ -494,16 +494,17 @@ R2 动作弹窗使用虚拟按键 `24~31`，由实体 `...` / Quick Access（ID 
 | 40 | R1_CATCH_PREPARE | `PREPARE` | `momentary` | R1_catch：prepare |
 | 41 | R1_CATCH_RAISE | `RAISE` | `momentary` | R1_catch：raise |
 | 42 | R1_CATCH_ATTACK | `ATTACK` | `momentary` | R1_catch：attack |
-| 43~45 | - | - | - | 保留未分配 |
-| 46 | R1_CATCH_RELEASE | `RELEASE` | `momentary` | R1_catch：release |
-| 47 | R1_CATCH_SEIZE | `SEIZE` | `momentary` | R1_catch：seize |
+| 43 | R1_CATCH_SWITCH | `SWITCH` | `toggle` | R1_catch：阀1开关状态 |
+| 44~47 | - | - | - | 保留未分配 |
 
 按键激活方式在 `ui/config.py` 中配置：
 
 - `toggle`: 按一次锁存为 True，再按一次解除。
 - `momentary`: 按住为 True，松开为 False。
 
-全局默认触发方式是 `momentary`。中间区域的 13 个机构动作虚拟按键在 `VIRTUAL_BUTTON_MAP` 中单独配置：SBUS_2（ID 32~39）为 `toggle`，R1 Catch（ID 40、41、42、46、47）为 `momentary`。屏幕虚拟按钮可以在每个条目里单独设置 `"mode"`。Steam Deck 实体按钮在 `PHYSICAL_BUTTON_MODE_MAP` 里按 ID 设置，其中 `MENU / Start` 保持 `toggle` 用于本地 ESTOP。普通实体按键和主页虚拟按键会合并到 `buttons` bitmask；已映射到 `/aruco_comm/tx_id` 的 R2 Target Action 按钮不会进入 `/controller` bitmask。
+全局默认触发方式是 `momentary`。中间区域的 12 个机构动作虚拟按键在 `VIRTUAL_BUTTON_MAP` 中单独配置：SBUS_2（ID 32~39）为 `toggle`；R1 Catch 的 Prepare、Raise、Attack（ID 40~42）为 `momentary`，Switch（ID 43）为 `toggle`。屏幕虚拟按钮可以在每个条目里单独设置 `"mode"`。Steam Deck 实体按钮在 `PHYSICAL_BUTTON_MODE_MAP` 里按 ID 设置，其中 `MENU / Start` 保持 `toggle` 用于本地 ESTOP。普通实体按键和主页虚拟按键会合并到 `buttons` bitmask；已映射到 `/aruco_comm/tx_id` 的 R2 Target Action 按钮不会进入 `/controller` bitmask。
+
+R1 Catch 的 `momentary` 按钮在按住期间每帧为 True，松开后恢复 False。Switch 第一次点击后持续为 True，第二次点击后恢复 False。若下位机只检测 Switch 的上升沿，则只会在 Switch 从 False 变为 True 时触发翻转。
 
 ## Flags
 
@@ -529,7 +530,7 @@ R2 动作弹窗使用虚拟按键 `24~31`，由实体 `...` / Quick Access（ID 
 
 如果发送端传入 `estop=True`，则设置 `ESTOP`。当前 GUI 使用 `MENU` 作为唯一手动 ESTOP/ENABLE/CLEAR 开关：按下 MENU 进入 ESTOP，再按一次 MENU 恢复 enable；底部 `CLEAR ESTOP` 也会清除 MENU 急停状态。
 
-当前 13 个主页虚拟按钮不会直接修改 flags；它们只作为普通 button bit 发送。
+当前 12 个主页虚拟按钮不会直接修改 flags；它们只作为普通 button bit 发送。
 
 ## 心跳保护和 Failsafe
 
