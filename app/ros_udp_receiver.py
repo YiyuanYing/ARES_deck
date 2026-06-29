@@ -19,6 +19,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from app.params import get_section
 from core.protocol import AXIS_KEYS, BUTTON_IDS, BUTTON_NAMES
 from core.udp_receiver import BIND_IP, CONTROL_HZ, PORT, ControllerUdpReceiver
+from ui.config import configured_toggle_button_ids
 
 
 DEFAULT_CONTROLLER_TOPIC = "/controller"
@@ -320,7 +321,11 @@ class ControllerRosPublisher:
         self.node = _Node("controller_udp_receiver")
         raw_mapping = parse_button_to_tx_id(args.button_to_tx_id)
         self.button_to_tx_id = filter_reserved_tx_id_mapping(raw_mapping, self.node.get_logger())
-        self.receiver = ControllerUdpReceiver(bind_ip=args.bind_ip, port=args.port)
+        self.receiver = ControllerUdpReceiver(
+            bind_ip=args.bind_ip,
+            port=args.port,
+            toggle_button_ids=configured_toggle_button_ids(),
+        )
         self.controller_topics = normalize_controller_topics(
             getattr(args, "controller_topics", None),
             fallback=args.controller_topic,

@@ -13,7 +13,7 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Deque, Dict, Tuple
+from typing import Deque, Dict, Iterable, Tuple
 
 from core.protocol import (
     BUTTON_IDS,
@@ -69,9 +69,18 @@ class ReceiverStats:
 
 
 class ControllerUdpReceiver:
-    def __init__(self, bind_ip: str = BIND_IP, port: int = PORT) -> None:
+    def __init__(
+        self,
+        bind_ip: str = BIND_IP,
+        port: int = PORT,
+        toggle_button_ids: Iterable[int] = (),
+    ) -> None:
         self.bind_ip = bind_ip
         self.port = port
+        toggle_ids = {int(value) for value in toggle_button_ids}
+        self.toggle_button_names = frozenset(
+            name for name, button_id in BUTTON_IDS.items() if button_id in toggle_ids
+        )
         self.sock: socket.socket | None = None
         self.stop_event = threading.Event()
         self.thread: threading.Thread | None = None
@@ -187,7 +196,10 @@ class ControllerUdpReceiver:
         buttons = dict(frame["buttons"])
         if safe_output:
             axes = {"lx": 0.0, "ly": 0.0, "rx": 0.0, "ry": 0.0}
-            buttons = {name: False for name in buttons}
+            buttons = {
+                name: bool(active) if name in self.toggle_button_names else False
+                for name, active in buttons.items()
+            }
 
         now_rate = self.stats.rx_rate(now)
         return {

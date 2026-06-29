@@ -306,3 +306,17 @@ PHYSICAL_BUTTON_MODE_MAP = {
 }
 
 OUTPUT_PHYSICAL_BUTTON_IDS = tuple(range(2, 24))
+
+
+def configured_toggle_button_ids() -> frozenset[int]:
+    virtual_ids = {
+        int(button_id)
+        for button_id, config in VIRTUAL_BUTTON_MAP.items()
+        if config.get("mode", DEFAULT_BUTTON_ACTIVATION_MODE) == "toggle"
+    }
+    physical_ids = {
+        int(button_id)
+        for button_id in OUTPUT_PHYSICAL_BUTTON_IDS
+        if PHYSICAL_BUTTON_MODE_MAP.get(button_id, DEFAULT_BUTTON_ACTIVATION_MODE) == "toggle"
+    }
+    return frozenset(virtual_ids | physical_ids)

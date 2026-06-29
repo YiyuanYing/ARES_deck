@@ -23,6 +23,7 @@ from core.udp_receiver import (
     build_status_block,
     build_status_line,
 )
+from ui.config import configured_toggle_button_ids
 
 
 def parse_args() -> argparse.Namespace:
@@ -66,7 +67,11 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    receiver = ControllerUdpReceiver(bind_ip=args.bind_ip, port=args.port)
+    receiver = ControllerUdpReceiver(
+        bind_ip=args.bind_ip,
+        port=args.port,
+        toggle_button_ids=configured_toggle_button_ids(),
+    )
     map_receiver = None
     receiver.start()
     if not args.no_map_receiver:
